@@ -1,0 +1,8 @@
+## Managed component dependencies (ESP-IDF Component Manager).
+## `idf.py build` (or `idf.py reconfigure`) downloads these into managed_components/.
+dependencies:
+  idf: ">=5.4"
+  # USB Host CDC-ACM class driver. Handles composite devices; lets us bind the
+  # Mosaic virtual COM interface without hand-rolling raw usb_host transfers.
+  # https://components.espressif.com/components/espressif/usb_host_cdc_acm
+  espressif/usb_host_cdc_acm: "^2.0.0"

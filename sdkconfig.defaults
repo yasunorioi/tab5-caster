@@ -1,0 +1,23 @@
+# sdkconfig.defaults — baseline for ESP32-P4 / Tab5.
+# Verify/adjust the rest via `idf.py menuconfig` on real hardware.
+
+CONFIG_IDF_TARGET="esp32p4"
+
+# ── PSRAM (Tab5 = 32MB) ───────────────────────────────────────────────────
+# Thread-per-connection needs room: ~15 conn x ~8KB task stacks + ring buffers.
+# TODO(hw): confirm exact P4/Tab5 PSRAM Kconfig keys in menuconfig (mode/speed).
+CONFIG_SPIRAM=y
+
+# ── lwIP: raise socket ceiling ────────────────────────────────────────────
+# Sockets != rovers. Budget = caster listener + admin listener + fkp upstream
+# + base source(s) + N rovers. For the 5-10 rover target, 24 leaves headroom.
+CONFIG_LWIP_MAX_SOCKETS=24
+
+# ── FreeRTOS ──────────────────────────────────────────────────────────────
+CONFIG_FREERTOS_HZ=1000
+
+# ── USB Host ──────────────────────────────────────────────────────────────
+# The usb_host library is pulled in as a component; host mode on the P4 HS OTG
+# is configured at runtime (usb_host_install). No single Kconfig toggle here.
+# TODO(hw): confirm which Tab5 connector is wired to the HS OTG host PHY and how
+# VBUS is supplied to the Mosaic (bus-power vs external).
