@@ -8,9 +8,22 @@
 
 #pragma once
 
+#include <stdint.h>
+#include <stdbool.h>
 #include "esp_err.h"
 
 // Starts two tasks: the USB host library event pump, and the CDC connect/read
 // loop. Returns after the host stack is installed; device attach is async.
 // rtcm_sink_init() must have been called first.
 esp_err_t usb_cdc_source_start(void);
+
+// Snapshot of USB state for the `usb` console command.
+typedef struct {
+    bool     host_installed;   // usb_host_install() done
+    bool     device_attached;  // some CDC device enumerated
+    bool     cdc_open;         // the streaming interface is open
+    uint16_t vid;              // last attached device (0 if none)
+    uint16_t pid;
+} usb_cdc_status_t;
+
+void usb_cdc_source_status(usb_cdc_status_t *out);

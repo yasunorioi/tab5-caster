@@ -52,6 +52,29 @@ the source is USB CDC or (some day) UART, the downstream is identical.
 3. **CDC-ACM host is callback-driven, not a POSIX fd** — hence the StreamBuffer
    instead of wrapping it as an `io.Stream` directly on the USB side.
 
+## Debugging
+
+On-device REPL over the console (UART / USB-Serial-JTAG, same port as
+`idf.py monitor`). Type `help`; commands:
+
+| cmd | what |
+|-----|------|
+| `stats` | byte count, CRC-valid frame count, CRC fails, ms since last good frame |
+| `rtcm`  | message-type histogram — instantly shows if `1005/1077/1087/1097/1019` are present (the types the caster/FKP need), annotated |
+| `dump [n]` | hexdump the last CRC-valid frame |
+| `usb`   | USB host installed? device attached? CDC open? attached VID/PID |
+
+`rtcm_monitor.c` validates **CRC-24Q**, so `valid_frames` means real RTCM3, not
+just stray `0xD3` bytes. It's a permanent diagnostic tap — keep it after the
+caster lands.
+
+**IDF also ships ready-made USB tools** (no need to reinvent for M0):
+- `$IDF_PATH/examples/peripherals/usb/host/usb_host_lib` — attach any device,
+  dumps full device/config/interface descriptors. Use this to read the Mosaic's
+  VID/PID and find the RTCM-streaming CDC interface index, then fill
+  `MOSAIC_VID/PID/CDC_ITF` in `usb_cdc_source.c`.
+- `.../usb/host/cdc` — CDC-ACM host open/rx/tx reference.
+
 ## Milestones
 
 - **M0 — enumerate.** Attach Mosaic; `new_dev_cb` + `cdc_acm_host_desc_print`

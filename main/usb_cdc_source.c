@@ -25,6 +25,15 @@
 
 static const char *TAG = "usb_cdc";
 
+// Shared status for the `usb` console command. Plain writes from the driver
+// tasks / callbacks; reads are advisory (no lock needed for a status snapshot).
+static volatile usb_cdc_status_t s_status;
+
+void usb_cdc_source_status(usb_cdc_status_t *out)
+{
+    if (out) *out = s_status;
+}
+
 // ── Device identity ─────────────────────────────────────────────────────────
 // TODO(hw): read these from the M0 attach log (new_dev_cb below) and pin them.
 // Septentrio mosaic USB VID/PID and which CDC interface index carries the
@@ -45,6 +54,7 @@ static void usb_lib_task(void *arg)
     };
     ESP_ERROR_CHECK(usb_host_install(&host_config));
     ESP_LOGI(TAG, "usb_host installed");
+    s_status.host_installed = true;
     xTaskNotifyGive((TaskHandle_t)arg);   // tell starter the host stack is up
 
     while (1) {
@@ -66,6 +76,9 @@ static void new_dev_cb(usb_device_handle_t usb_dev)
     if (usb_host_get_device_descriptor(usb_dev, &desc) == ESP_OK) {
         ESP_LOGI(TAG, "CDC device attached: VID=0x%04X PID=0x%04X",
                  desc->idVendor, desc->idProduct);
+        s_status.device_attached = true;
+        s_status.vid = desc->idVendor;
+        s_status.pid = desc->idProduct;
     }
     // TODO(hw): also call usb_host_get_active_config_descriptor() and walk the
     // interfaces to identify which CDC-ACM interface streams RTCM3.
@@ -83,6 +96,7 @@ static void cdc_event_cb(const cdc_acm_host_dev_event_data_t *event, void *user_
         ESP_LOGW(TAG, "Mosaic disconnected");
         // Close on the driver's terms and let the open loop retry.
         cdc_acm_host_close(event->data.cdc_hdl);
+        s_status.cdc_open = false;
         xSemaphoreGive(s_disconnected);
         break;
     case CDC_ACM_HOST_SERIAL_STATE:
@@ -126,6 +140,7 @@ static void cdc_task(void *arg)
             continue;
         }
         ESP_LOGI(TAG, "Mosaic CDC opened");
+        s_status.cdc_open = true;
         cdc_acm_host_desc_print(cdc);    // M0: full descriptor dump
 
         const cdc_acm_line_coding_t lc = {
