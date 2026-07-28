@@ -6,3 +6,7 @@ dependencies:
   # Mosaic virtual COM interface without hand-rolling raw usb_host transfers.
   # https://components.espressif.com/components/espressif/usb_host_cdc_acm
   espressif/usb_host_cdc_acm: "^2.0.0"
+  # mDNS: advertise the caster as <hostname>.local + _ntrip._tcp so field rovers
+  # find it by name instead of a DHCP IP. Needs an active netif to be reachable.
+  # https://components.espressif.com/components/espressif/mdns
+  espressif/mdns: "^1.2.0"

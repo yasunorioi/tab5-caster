@@ -5,6 +5,7 @@ idf_component_register(
         "rtcm_sink.c"
         "rtcm_monitor.c"
         "debug_console.c"
+        "net_mdns.c"
     INCLUDE_DIRS "."
-    REQUIRES console esp_timer
+    REQUIRES console esp_timer mdns
 )

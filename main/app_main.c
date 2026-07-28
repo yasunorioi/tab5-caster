@@ -18,8 +18,13 @@
 #include "rtcm_monitor.h"
 #include "usb_cdc_source.h"
 #include "debug_console.h"
+#include "net_mdns.h"
 
 static const char *TAG = "tab5-caster";
+
+// Service ports the caster will serve on (once the caster + netif land).
+#define CASTER_PORT  2101   // NTRIP default
+#define ADMIN_PORT   8080   // status / admin web UI
 
 // Drains the sink and feeds the monitor. Also logs a periodic liveness line so
 // `idf.py monitor` shows activity without needing to type console commands.
@@ -55,6 +60,14 @@ void app_main(void)
     ESP_ERROR_CHECK(usb_cdc_source_start());
 
     xTaskCreate(rtcm_feed_task, "rtcm_feed", 4096, NULL, 4, NULL);
+
+    // Advertise as rtk.local + _ntrip._tcp for zero-config field discovery.
+    // NOTE(hw): needs a netif (WiFi via C6/ESP-Hosted or Ethernet) to be
+    // reachable — network bring-up is still TODO. Starting it now is harmless;
+    // it becomes discoverable the moment a netif comes up.
+    // TODO(product): per-unit unique hostname (e.g. rtk-<serial>) to avoid
+    // rtk.local collisions when several boxes share a field LAN.
+    net_mdns_start("rtk", CASTER_PORT, ADMIN_PORT);
 
     debug_console_start();
 }

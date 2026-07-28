@@ -86,6 +86,15 @@ caster lands.
 - **M3 — cloud + UI.** Forward base upstream to the cloud caster; Tab5 MIPI-DSI
   status panel (sources / rover count / RTCM rate).
 
+## Discovery (mDNS)
+
+`net_mdns.c` advertises the box as **`rtk.local`** with `_ntrip._tcp` (caster)
+and `_http._tcp` (status UI), so a field rover / laptop finds it by name instead
+of a DHCP IP. The advertisement code compiles and is wired into `app_main`, but
+mDNS only becomes *reachable* once a **netif exists** — WiFi (C6 / ESP-Hosted)
+or Ethernet bring-up is still `TODO(hw)`. Per-unit unique hostnames
+(`rtk-<serial>`) are a product TODO to avoid `.local` collisions on a shared LAN.
+
 ## Build (on a machine with ESP-IDF 5.4+)
 
 ```sh
