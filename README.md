@@ -9,9 +9,10 @@ keep getting corrections **even when the internet is down** — the offline-auto
 reason the box exists. FKP / network-RTK synthesis is done in the **cloud**, not
 on this box.
 
-> **Status: skeleton, uncompiled.** Written without an ESP-IDF toolchain on hand.
-> The `usb_host_cdc_acm` API field set may need to match the installed component
-> version. Everything marked `TODO(hw)` needs the real Tab5 + Mosaic on the bench.
+> **Status: compiles clean, hardware-untested.** Builds for `esp32p4` on
+> ESP-IDF **5.4.4** with `espressif/usb_host_cdc_acm` **2.4.0** (zero warnings).
+> Compilation is not runtime proof — everything marked `TODO(hw)` still needs the
+> real Tab5 + Mosaic on the bench (VID/PID/interface, HS-OTG port + VBUS, PSRAM).
 
 ## Why USB and not UART
 

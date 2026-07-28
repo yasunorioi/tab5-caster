@@ -1,9 +1,8 @@
 // usb_cdc_source.c — USB Host CDC-ACM driver skeleton. See usb_cdc_source.h.
 //
-// UNVERIFIED: not compiled (no IDF toolchain on the authoring machine). The
-// cdc_acm_host_device_config_t field set and a couple of API names may need to
-// match the exact `espressif/usb_host_cdc_acm` version the component manager
-// pulls. Marked TODO(hw) where a real device / oscilloscope is needed.
+// Compiles clean for esp32p4 on ESP-IDF 5.4.4 with usb_host_cdc_acm 2.4.0.
+// Runtime is UNTESTED — no hardware yet. Marked TODO(hw) where a real device is
+// needed (VID/PID/interface, HS-OTG port + VBUS).
 //
 // Data flow:
 //   USB HS OTG  ->  cdc_acm_host data_cb  ->  rtcm_sink_push()  ->  StreamBuffer

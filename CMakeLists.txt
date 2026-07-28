@@ -5,9 +5,8 @@
 #   idf.py menuconfig     # verify USB host / PSRAM / lwIP sockets
 #   idf.py build flash monitor
 #
-# NOTE: These sources have NOT been compiled — no IDF toolchain on the authoring
-# machine. Treat as a skeleton; the usb_host_cdc_acm API field set may need to
-# match the exact component version pulled by the component manager.
+# NOTE: Builds clean for esp32p4 on ESP-IDF 5.4.4 (usb_host_cdc_acm 2.4.0).
+# Runtime untested — see TODO(hw) markers. Compilation is not hardware proof.
 
 cmake_minimum_required(VERSION 3.16)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
