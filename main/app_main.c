@@ -55,11 +55,16 @@ void app_main(void)
 {
     ESP_LOGI(TAG, "tab5-caster boot (ESP32-P4 / Mosaic USB CDC -> caster)");
 
+    // Console FIRST. This is a headless box whose only operator interface is the
+    // USB-C serial/JTAG console — the REPL must come up before anything that can
+    // block or abort. usb_cdc_source_start() blocks app_main until usb_host_install
+    // returns (and aborts on failure); if the HS-OTG PHY/VBUS isn't up on real
+    // hardware, starting the console after it would leave the box mute. The REPL
+    // runs on its own task, so it survives even if USB host bring-up hangs below.
     rtcm_monitor_init();
-    ESP_ERROR_CHECK(rtcm_sink_init());
-    ESP_ERROR_CHECK(usb_cdc_source_start());
+    debug_console_start();
 
-    xTaskCreate(rtcm_feed_task, "rtcm_feed", 4096, NULL, 4, NULL);
+    ESP_ERROR_CHECK(rtcm_sink_init());
 
     // Advertise as rtk.local + _ntrip._tcp for zero-config field discovery.
     // NOTE(hw): needs a netif (WiFi via C6/ESP-Hosted or Ethernet) to be
@@ -69,5 +74,10 @@ void app_main(void)
     // rtk.local collisions when several boxes share a field LAN.
     net_mdns_start("rtk", CASTER_PORT, ADMIN_PORT);
 
-    debug_console_start();
+    xTaskCreate(rtcm_feed_task, "rtcm_feed", 4096, NULL, 4, NULL);
+
+    // USB host bring-up LAST: it blocks here until usb_host_install() completes,
+    // and on real hardware may hang/abort if the OTG PHY or VBUS isn't wired.
+    // Everything the operator needs to diagnose that is already running above.
+    ESP_ERROR_CHECK(usb_cdc_source_start());
 }

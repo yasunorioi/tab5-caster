@@ -16,6 +16,13 @@ CONFIG_LWIP_MAX_SOCKETS=24
 # ── FreeRTOS ──────────────────────────────────────────────────────────────
 CONFIG_FREERTOS_HZ=1000
 
+# ── Console ───────────────────────────────────────────────────────────────
+# Headless product: no UART header wired. Put the primary console (boot log +
+# esp_console REPL) on the USB-Serial/JTAG controller so everything comes out
+# the USB-C port on /dev/ttyACM*. This also makes debug_console.c compile its
+# usb_serial_jtag REPL path instead of the UART one.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
 # ── USB Host ──────────────────────────────────────────────────────────────
 # The usb_host library is pulled in as a component; host mode on the P4 HS OTG
 # is configured at runtime (usb_host_install). No single Kconfig toggle here.

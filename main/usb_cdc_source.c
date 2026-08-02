@@ -120,6 +120,11 @@ static void cdc_task(void *arg)
     ESP_ERROR_CHECK(cdc_acm_host_install(NULL));
     ESP_LOGI(TAG, "cdc_acm_host installed");
 
+    // Register the composite new-device logger (milestone-0 discovery) only AFTER
+    // cdc_acm_host_install() has allocated the driver object — the register call
+    // dereferences that object, so doing it earlier is a NULL store fault.
+    cdc_acm_host_register_new_dev_callback(new_dev_cb);
+
     const cdc_acm_host_device_config_t dev_cfg = {
         .connection_timeout_ms = 5000,
         .out_buffer_size = 512,       // we mostly RX; small TX for config cmds
@@ -174,9 +179,8 @@ esp_err_t usb_cdc_source_start(void)
     // Wait until usb_host_install() completed before installing the class driver.
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    // Register the composite new-device logger (milestone-0 discovery).
-    cdc_acm_host_register_new_dev_callback(new_dev_cb);
-
+    // new_dev_cb is registered inside cdc_task, right after cdc_acm_host_install()
+    // — it must not run before the driver object exists.
     if (xTaskCreate(cdc_task, "cdc", 4096, NULL, 5, NULL) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
