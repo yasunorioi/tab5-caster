@@ -19,6 +19,7 @@
 #include "usb_cdc_source.h"
 #include "debug_console.h"
 #include "net_mdns.h"
+#include "board_power.h"
 
 static const char *TAG = "tab5-caster";
 
@@ -75,6 +76,17 @@ void app_main(void)
     net_mdns_start("rtk", CASTER_PORT, ADMIN_PORT);
 
     xTaskCreate(rtcm_feed_task, "rtcm_feed", 4096, NULL, 4, NULL);
+
+    // Enable USB-A VBUS BEFORE the host installs. On Tab5 the USB-A 5V rail is
+    // gated by an I/O expander (PI4IOE #2, P3 = USB5V_EN); without this a device
+    // is only trickle-powered and never enumerates on the P4 HS OTG. Non-fatal
+    // if it fails — log and press on so the console/USB host still come up for
+    // diagnosis (an unpowered port just means "waiting for Mosaic" forever).
+    esp_err_t pwr = board_power_init();
+    if (pwr != ESP_OK) {
+        ESP_LOGE(TAG, "board_power_init failed (%s) — USB-A VBUS may be off",
+                 esp_err_to_name(pwr));
+    }
 
     // USB host bring-up LAST: it blocks here until usb_host_install() completes,
     // and on real hardware may hang/abort if the OTG PHY or VBUS isn't wired.

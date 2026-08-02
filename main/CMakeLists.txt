@@ -6,6 +6,7 @@ idf_component_register(
         "rtcm_monitor.c"
         "debug_console.c"
         "net_mdns.c"
+        "board_power.c"
     INCLUDE_DIRS "."
-    REQUIRES console esp_timer mdns
+    REQUIRES console esp_timer mdns esp_driver_i2c
 )
