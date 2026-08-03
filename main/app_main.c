@@ -43,7 +43,14 @@ static void rtcm_feed_task(void *arg)
         if (xTaskGetTickCount() - last_log > pdMS_TO_TICKS(5000)) {
             rtcm_mon_stats_t s;
             rtcm_monitor_get(&s);
-            ESP_LOGI(TAG, "rx: %llu bytes, %llu valid RTCM3 frames, %llu CRC fails",
+            usb_cdc_status_t u;
+            usb_cdc_source_status(&u);
+            // Fold USB state into the periodic line so the box is diagnosable
+            // from any capture window without needing to catch the boot log
+            // (the USB-Serial-JTAG console drops one-shot events when unread).
+            ESP_LOGI(TAG, "usb[host=%d attach=%d open=%d %04X:%04X] rx: %llu B, "
+                     "%llu RTCM3, %llu CRCfail",
+                     u.host_installed, u.device_attached, u.cdc_open, u.vid, u.pid,
                      (unsigned long long)s.total_bytes,
                      (unsigned long long)s.valid_frames,
                      (unsigned long long)s.crc_fails);
