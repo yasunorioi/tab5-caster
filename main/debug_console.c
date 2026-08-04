@@ -146,6 +146,29 @@ static int cmd_caster(int argc, char **argv)
     return 0;
 }
 
+static int cmd_csource(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    caster_source_stats_t s;
+    caster_source_stats(&s);
+    if (!s.running) {
+        printf("caster not started (run 'caster' first)\n");
+        return 0;
+    }
+    if (!s.source_present) {
+        printf("caster running, but /MOSAIC source not registered yet\n");
+        return 0;
+    }
+    // These come from the Zig SourceFeeder draining the tee — separate from the
+    // C monitor's 'stats'/'rtcm' (which tap the primary sink).
+    printf("/MOSAIC: bytes_in=%llu  rtcm_detected=%d  clients=%u  types=%u\n",
+           s.bytes_in, s.rtcm_detected, s.client_count, s.num_msg_types);
+    for (unsigned i = 0; i < s.num_msg_types && i < 12; i++) {
+        printf("  %5u : %lu\n", s.types[i], (unsigned long)s.counts[i]);
+    }
+    return 0;
+}
+
 static void register_cmds(void)
 {
     const esp_console_cmd_t cmds[] = {
@@ -155,6 +178,7 @@ static void register_cmds(void)
         { .command = "raw",   .help = "hex+ascii of last raw bytes (any content)", .func = cmd_raw },
         { .command = "usb",   .help = "USB host / CDC attach state",          .func = cmd_usb   },
         { .command = "caster", .help = "start the Zig ntripcaster (listener + local source)", .func = cmd_caster },
+        { .command = "csource", .help = "caster's /MOSAIC source state (bytes/types via the tee)", .func = cmd_csource },
     };
     for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {
         ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));

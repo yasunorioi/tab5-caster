@@ -24,6 +24,23 @@ int caster_start(void);
 // the signature.
 void caster_console_write(const char *data, size_t len);
 
+// Live state of the locally-wired /MOSAIC source. Lets the firmware confirm the
+// caster's feeder is draining the tee and parsing RTCM3, independently of the
+// C-side monitor (which taps the primary sink). Layout must match SourceStats
+// in src/embedded.zig. Implemented in Zig.
+typedef struct {
+    int running;                 // caster_start() has been called
+    int source_present;          // /MOSAIC is registered (feeder up)
+    int rtcm_detected;           // a valid RTCM3 frame has been parsed
+    unsigned long long bytes_in; // bytes fed into the source ring
+    unsigned client_count;       // rovers currently pulling
+    unsigned num_msg_types;      // distinct RTCM3 message types seen
+    unsigned short types[12];    // up to 12 (msg_type, count) pairs
+    unsigned counts[12];
+} caster_source_stats_t;
+
+void caster_source_stats(caster_source_stats_t *out);
+
 #ifdef __cplusplus
 }
 #endif
