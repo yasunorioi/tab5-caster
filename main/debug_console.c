@@ -90,6 +90,32 @@ static int cmd_dump(int argc, char **argv)
     return 0;
 }
 
+static int cmd_raw(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    uint8_t buf[RTCM_MON_RAW_BYTES];
+    size_t n = rtcm_monitor_last_raw(buf, sizeof(buf));
+    if (n == 0) {
+        printf("no bytes seen yet\n");
+        return 0;
+    }
+    printf("last %u raw bytes (hex | ascii):\n", (unsigned)n);
+    for (size_t i = 0; i < n; i += 16) {
+        printf("%04x  ", (unsigned)i);
+        for (size_t j = 0; j < 16; j++) {
+            if (i + j < n) printf("%02X ", buf[i + j]);
+            else           printf("   ");
+        }
+        printf(" |");
+        for (size_t j = 0; j < 16 && i + j < n; j++) {
+            uint8_t c = buf[i + j];
+            printf("%c", (c >= 0x20 && c < 0x7F) ? c : '.');
+        }
+        printf("|\n");
+    }
+    return 0;
+}
+
 static int cmd_usb(int argc, char **argv)
 {
     (void)argc; (void)argv;
@@ -99,6 +125,8 @@ static int cmd_usb(int argc, char **argv)
            u.host_installed, u.device_attached, u.cdc_open);
     if (u.device_attached) {
         printf("attached VID=0x%04X PID=0x%04X\n", u.vid, u.pid);
+        printf("topology: n=%u if[%s]\n", u.num_interfaces, u.topo);
+        printf("cur_itf=%d  stream_itf=%d\n", (int8_t)u.cur_itf, (int8_t)u.stream_itf);
     }
     return 0;
 }
@@ -109,6 +137,7 @@ static void register_cmds(void)
         { .command = "stats", .help = "RTCM byte/frame counters + staleness", .func = cmd_stats },
         { .command = "rtcm",  .help = "RTCM3 message-type histogram",         .func = cmd_rtcm  },
         { .command = "dump",  .help = "hexdump last valid frame [n bytes]",   .hint = "[n]", .func = cmd_dump },
+        { .command = "raw",   .help = "hex+ascii of last raw bytes (any content)", .func = cmd_raw },
         { .command = "usb",   .help = "USB host / CDC attach state",          .func = cmd_usb   },
     };
     for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {

@@ -15,6 +15,7 @@
 
 #define RTCM_MON_MAX_TYPES   48   // distinct message types tracked
 #define RTCM_MON_SNAP_BYTES  256  // last-frame snapshot for `dump`
+#define RTCM_MON_RAW_BYTES   128  // rolling raw-byte tap for `raw`
 
 typedef struct {
     uint16_t type;
@@ -42,3 +43,7 @@ void rtcm_monitor_get(rtcm_mon_stats_t *out);
 // Copy the last CRC-valid frame into buf (up to max). Returns its length (0 if
 // none yet). Used by the `dump` console command.
 size_t rtcm_monitor_last_frame(uint8_t *buf, size_t max);
+
+// Copy the most-recent raw bytes seen (up to max), regardless of RTCM3 validity.
+// Returns the count. Lets `raw` inspect a non-RTCM3 stream (NMEA/SBF/echo).
+size_t rtcm_monitor_last_raw(uint8_t *buf, size_t max);

@@ -48,9 +48,10 @@ static void rtcm_feed_task(void *arg)
             // Fold USB state into the periodic line so the box is diagnosable
             // from any capture window without needing to catch the boot log
             // (the USB-Serial-JTAG console drops one-shot events when unread).
-            ESP_LOGI(TAG, "usb[host=%d attach=%d open=%d %04X:%04X] rx: %llu B, "
-                     "%llu RTCM3, %llu CRCfail",
+            ESP_LOGI(TAG, "usb[host=%d attach=%d open=%d %04X:%04X n=%u if[%s] "
+                     "cur=%d stream=%d] rx: %llu B, %llu RTCM3, %llu CRCfail",
                      u.host_installed, u.device_attached, u.cdc_open, u.vid, u.pid,
+                     u.num_interfaces, u.topo, (int8_t)u.cur_itf, (int8_t)u.stream_itf,
                      (unsigned long long)s.total_bytes,
                      (unsigned long long)s.valid_frames,
                      (unsigned long long)s.crc_fails);

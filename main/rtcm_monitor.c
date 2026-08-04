@@ -25,6 +25,10 @@ static size_t   s_parse_len;
 static uint8_t  s_last_frame[RTCM_MON_SNAP_BYTES];
 static size_t   s_last_frame_len;
 
+// Rolling tap of the most-recent raw bytes (any content), for the `raw` command.
+static uint8_t  s_raw[RTCM_MON_RAW_BYTES];
+static size_t   s_raw_len;
+
 // CRC-24Q (Qualcomm), poly 0x1864CFB — the RTCM3 frame checksum.
 static uint32_t crc24q(const uint8_t *data, size_t len)
 {
@@ -68,6 +72,20 @@ void rtcm_monitor_feed(const uint8_t *data, size_t len)
     xSemaphoreTake(s_lock, portMAX_DELAY);
 
     s_stats.total_bytes += len;
+
+    // Keep the last RTCM_MON_RAW_BYTES raw bytes for inspection.
+    if (len >= RTCM_MON_RAW_BYTES) {
+        memcpy(s_raw, data + (len - RTCM_MON_RAW_BYTES), RTCM_MON_RAW_BYTES);
+        s_raw_len = RTCM_MON_RAW_BYTES;
+    } else {
+        size_t keep = RTCM_MON_RAW_BYTES - len;
+        if (s_raw_len > keep) {
+            memmove(s_raw, s_raw + (s_raw_len - keep), keep);
+            s_raw_len = keep;
+        }
+        memcpy(s_raw + s_raw_len, data, len);
+        s_raw_len += len;
+    }
 
     // Append to the reassembly buffer; on overflow keep the tail half so a
     // partial frame at the end survives.
@@ -141,6 +159,16 @@ size_t rtcm_monitor_last_frame(uint8_t *buf, size_t max)
     xSemaphoreTake(s_lock, portMAX_DELAY);
     size_t n = s_last_frame_len < max ? s_last_frame_len : max;
     memcpy(buf, s_last_frame, n);
+    xSemaphoreGive(s_lock);
+    return n;
+}
+
+size_t rtcm_monitor_last_raw(uint8_t *buf, size_t max)
+{
+    if (s_lock == NULL || buf == NULL || max == 0) return 0;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    size_t n = s_raw_len < max ? s_raw_len : max;
+    memcpy(buf, s_raw, n);
     xSemaphoreGive(s_lock);
     return n;
 }

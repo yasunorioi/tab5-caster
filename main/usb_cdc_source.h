@@ -17,6 +17,11 @@
 // rtcm_sink_init() must have been called first.
 esp_err_t usb_cdc_source_start(void);
 
+// Compact per-interface topology summary, filled at attach by walking the
+// active config descriptor. Rendered into the periodic liveness line so the
+// full interface tree survives the USB-Serial-JTAG console dropping one-shots.
+#define USB_TOPO_MAX 112
+
 // Snapshot of USB state for the `usb` console command.
 typedef struct {
     bool     host_installed;   // usb_host_install() done
@@ -24,6 +29,10 @@ typedef struct {
     bool     cdc_open;         // the streaming interface is open
     uint16_t vid;              // last attached device (0 if none)
     uint16_t pid;
+    uint8_t  num_interfaces;   // alt-setting-0 interfaces in the active config
+    char     topo[USB_TOPO_MAX]; // "N:class/sub" per itf, e.g. "0:02/02 1:0a/00"
+    uint8_t  cur_itf;          // currently-open comm interface (0xFF = none)
+    uint8_t  stream_itf;       // interface that actually streamed (0xFF = none yet)
 } usb_cdc_status_t;
 
 void usb_cdc_source_status(usb_cdc_status_t *out);
