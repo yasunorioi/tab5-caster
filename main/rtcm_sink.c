@@ -16,15 +16,17 @@ static const char *TAG = "rtcm_sink";
 #define RTCM_SINK_TRIGGER     1
 
 static StreamBufferHandle_t s_buf;
+static StreamBufferHandle_t s_caster_buf;
 
 esp_err_t rtcm_sink_init(void)
 {
     s_buf = xStreamBufferCreate(RTCM_SINK_BUF_BYTES, RTCM_SINK_TRIGGER);
-    if (s_buf == NULL) {
+    s_caster_buf = xStreamBufferCreate(RTCM_SINK_BUF_BYTES, RTCM_SINK_TRIGGER);
+    if (s_buf == NULL || s_caster_buf == NULL) {
         ESP_LOGE(TAG, "xStreamBufferCreate(%d) failed (no mem)", RTCM_SINK_BUF_BYTES);
         return ESP_ERR_NO_MEM;
     }
-    ESP_LOGI(TAG, "sink ready (%d byte buffer)", RTCM_SINK_BUF_BYTES);
+    ESP_LOGI(TAG, "sink ready (%d byte buffer x2: sink + caster tee)", RTCM_SINK_BUF_BYTES);
     return ESP_OK;
 }
 
@@ -48,4 +50,23 @@ size_t rtcm_sink_read(uint8_t *out, size_t max_len, TickType_t timeout)
         return 0;
     }
     return xStreamBufferReceive(s_buf, out, max_len, timeout);
+}
+
+size_t rtcm_caster_push(const uint8_t *data, size_t len)
+{
+    if (s_caster_buf == NULL || data == NULL || len == 0) {
+        return 0;
+    }
+    // Non-blocking: the drain task must keep servicing the primary sink. Bytes
+    // are silently dropped until the caster starts draining s_caster_buf — that
+    // is fine, the caster only needs the live stream once it is running.
+    return xStreamBufferSend(s_caster_buf, data, len, 0);
+}
+
+size_t rtcm_caster_read(uint8_t *out, size_t max_len, TickType_t timeout)
+{
+    if (s_caster_buf == NULL || out == NULL || max_len == 0) {
+        return 0;
+    }
+    return xStreamBufferReceive(s_caster_buf, out, max_len, timeout);
 }

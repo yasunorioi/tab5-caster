@@ -22,6 +22,15 @@ esp_err_t rtcm_sink_init(void);
 size_t rtcm_sink_push(const uint8_t *data, size_t len);
 
 // Consumer side. Blocks up to `timeout` for at least 1 byte, then returns up to
-// `max_len` bytes. Returns bytes read (0 on timeout). This is the call the Zig
-// feeder will make (or io.Stream.read() backed by this on the embedded build).
+// `max_len` bytes. Returns bytes read (0 on timeout). The one drain task
+// (rtcm_feed_task) is the sole reader — a FreeRTOS StreamBuffer allows only one.
 size_t rtcm_sink_read(uint8_t *out, size_t max_len, TickType_t timeout);
+
+// ── caster tee (second stage) ────────────────────────────────────────────────
+// A StreamBuffer allows a single reader, so the monitor drain task and the Zig
+// caster cannot both read the primary sink. Instead the drain task, after
+// feeding the monitor, pushes the same bytes here, and the caster reads from
+// here. Push is non-blocking (drops while the caster isn't draining yet); read
+// is the blocking call the Zig local-source feeder makes (rtcm_caster_read).
+size_t rtcm_caster_push(const uint8_t *data, size_t len);
+size_t rtcm_caster_read(uint8_t *out, size_t max_len, TickType_t timeout);

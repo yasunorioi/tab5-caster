@@ -8,5 +8,5 @@ idf_component_register(
         "net_mdns.c"
         "board_power.c"
     INCLUDE_DIRS "."
-    REQUIRES console esp_timer mdns esp_driver_i2c ntripcaster
+    REQUIRES console esp_timer mdns esp_driver_i2c ntripcaster esp_netif esp_event
 )

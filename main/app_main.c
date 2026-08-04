@@ -13,6 +13,8 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_err.h"
+#include "esp_event.h"
+#include "esp_netif.h"
 
 #include "rtcm_sink.h"
 #include "rtcm_monitor.h"
@@ -39,6 +41,8 @@ static void rtcm_feed_task(void *arg)
         size_t n = rtcm_sink_read(buf, sizeof(buf), pdMS_TO_TICKS(1000));
         if (n) {
             rtcm_monitor_feed(buf, n);
+            // Tee the same bytes to the caster (no-op until `caster` is started).
+            rtcm_caster_push(buf, n);
         }
         if (xTaskGetTickCount() - last_log > pdMS_TO_TICKS(5000)) {
             rtcm_mon_stats_t s;
@@ -74,6 +78,13 @@ void app_main(void)
     debug_console_start();
 
     ESP_ERROR_CHECK(rtcm_sink_init());
+
+    // Bring up the TCP/IP stack (tcpip thread + lwIP core) and the default event
+    // loop. No actual netif (WiFi/Ethernet) is attached yet — that's TODO(hw) —
+    // but this makes lwIP sockets usable, so the caster's listener can bind and
+    // mdns can init. Without it, lwip_socket()/mdns_init() have no stack to run on.
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     // Advertise as rtk.local + _ntrip._tcp for zero-config field discovery.
     // NOTE(hw): needs a netif (WiFi via C6/ESP-Hosted or Ethernet) to be
