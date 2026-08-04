@@ -11,6 +11,7 @@
 
 #include "rtcm_monitor.h"
 #include "usb_cdc_source.h"
+#include "caster.h"
 
 static const char *TAG = "console";
 
@@ -131,6 +132,20 @@ static int cmd_usb(int argc, char **argv)
     return 0;
 }
 
+static int cmd_caster(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    // Start the Zig ntripcaster: TCP listener (rovers pull /MOSAIC) + local
+    // source feeder draining rtcm_sink. NOTE: it shares rtcm_sink with the
+    // monitor's feed task, so bytes are split between them — for a clean caster
+    // stream you'd stop the monitor drain first. Also needs a netif to be
+    // reachable (TODO(hw)); binding without one is harmless (accept just waits).
+    int rc = caster_start();
+    if (rc == 0) printf("caster started (listening on :2101, mount /MOSAIC)\n");
+    else         printf("caster_start failed: %d\n", rc);
+    return 0;
+}
+
 static void register_cmds(void)
 {
     const esp_console_cmd_t cmds[] = {
@@ -139,6 +154,7 @@ static void register_cmds(void)
         { .command = "dump",  .help = "hexdump last valid frame [n bytes]",   .hint = "[n]", .func = cmd_dump },
         { .command = "raw",   .help = "hex+ascii of last raw bytes (any content)", .func = cmd_raw },
         { .command = "usb",   .help = "USB host / CDC attach state",          .func = cmd_usb   },
+        { .command = "caster", .help = "start the Zig ntripcaster (listener + local source)", .func = cmd_caster },
     };
     for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {
         ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));
