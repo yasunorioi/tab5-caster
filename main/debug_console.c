@@ -12,6 +12,7 @@
 #include "rtcm_monitor.h"
 #include "usb_cdc_source.h"
 #include "caster.h"
+#include "wifi_sta.h"
 
 static const char *TAG = "console";
 
@@ -169,6 +170,14 @@ static int cmd_csource(int argc, char **argv)
     return 0;
 }
 
+static int cmd_wifireset(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    printf("erasing WiFi credentials and rebooting into setup portal...\n");
+    wifi_forget();  // does not return (reboots)
+    return 0;
+}
+
 static void register_cmds(void)
 {
     const esp_console_cmd_t cmds[] = {
@@ -179,6 +188,7 @@ static void register_cmds(void)
         { .command = "usb",   .help = "USB host / CDC attach state",          .func = cmd_usb   },
         { .command = "caster", .help = "start the Zig ntripcaster (listener + local source)", .func = cmd_caster },
         { .command = "csource", .help = "caster's /MOSAIC source state (bytes/types via the tee)", .func = cmd_csource },
+        { .command = "wifireset", .help = "erase WiFi creds + reboot into the setup portal", .func = cmd_wifireset },
     };
     for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {
         ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));

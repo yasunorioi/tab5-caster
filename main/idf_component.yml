@@ -10,3 +10,9 @@ dependencies:
   # find it by name instead of a DHCP IP. Needs an active netif to be reachable.
   # https://components.espressif.com/components/espressif/mdns
   espressif/mdns: "^1.2.0"
+  # WiFi via the onboard ESP32-C6 over SDIO (ESP-Hosted). esp_wifi_remote
+  # presents the normal esp_wifi API but runs the radio on the C6 co-processor.
+  # Versions PINNED to match the C6's factory ESP-Hosted slave firmware (same as
+  # M5Tab5-UserDemo) — a host/slave protocol mismatch breaks the link silently.
+  espressif/esp_hosted: "1.4.0"
+  espressif/esp_wifi_remote: "0.8.5"

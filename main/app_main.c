@@ -22,6 +22,7 @@
 #include "debug_console.h"
 #include "net_mdns.h"
 #include "board_power.h"
+#include "wifi_sta.h"
 
 static const char *TAG = "tab5-caster";
 
@@ -85,6 +86,11 @@ void app_main(void)
     // mdns can init. Without it, lwip_socket()/mdns_init() have no stack to run on.
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    // Join the field WiFi via the onboard C6 (ESP-Hosted/SDIO). Connects in the
+    // background; on GOT_IP it logs the address and starts the caster, so the
+    // box becomes a reachable NTRIP caster with no console interaction.
+    wifi_sta_start();
 
     // Advertise as rtk.local + _ntrip._tcp for zero-config field discovery.
     // NOTE(hw): needs a netif (WiFi via C6/ESP-Hosted or Ethernet) to be
