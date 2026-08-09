@@ -10,5 +10,5 @@ idf_component_register(
         "wifi_sta.c"
     INCLUDE_DIRS "."
     REQUIRES console esp_timer mdns esp_driver_i2c ntripcaster esp_netif esp_event
-             esp_wifi esp_wifi_remote nvs_flash esp_http_server
+             esp_wifi esp_wifi_remote nvs_flash
 )

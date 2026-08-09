@@ -5,6 +5,9 @@ sdkconfig
 sdkconfig.old
 dependencies.lock
 
+# prebuilt C6 ESP-Hosted slave firmware (reproducible from esp_hosted slave/)
+/c6-slave-fw/
+
 # editor / OS
 *.swp
 .DS_Store
