@@ -54,6 +54,13 @@ set(ZIG_CPU "generic_rv32+m+a+f+c")
 # single argument. build.zig splits NTRIPCASTER_IDF_INCLUDES on ';'.
 string(REPLACE ";" "\;" _zig_incs_env "${_zig_incs}")
 
+# Trigger a rebuild when any Zig source changes. Without a DEPENDS the OUTPUT-only
+# rule runs just once (when the .a is absent), so edits to ~/ntripcaster would
+# silently link a stale archive. Globbed at configure time — a *new* .zig file
+# needs a reconfigure, but edits to existing ones rebuild.
+file(GLOB_RECURSE _zig_srcs "${NTRIPCASTER_DIR}/src/*.zig")
+list(APPEND _zig_srcs "${NTRIPCASTER_DIR}/build.zig")
+
 add_custom_command(
     OUTPUT ${CASTER_LIB}
     COMMAND ${CMAKE_COMMAND} -E env
@@ -65,6 +72,7 @@ add_custom_command(
                 -Doptimize=ReleaseSmall
                 --prefix "${CMAKE_CURRENT_BINARY_DIR}/zig-out"
                 --cache-dir "${CMAKE_CURRENT_BINARY_DIR}/zig-cache"
+    DEPENDS ${_zig_srcs}
     WORKING_DIRECTORY "${NTRIPCASTER_DIR}"
     COMMENT "Cross-compiling Zig ntripcaster for esp32p4"
     VERBATIM
