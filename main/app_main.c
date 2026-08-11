@@ -87,20 +87,14 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    // Join the field WiFi via the onboard C6 (ESP-Hosted/SDIO). Connects in the
-    // background; on GOT_IP it logs the address and starts the caster, so the
-    // box becomes a reachable NTRIP caster with no console interaction.
-    wifi_sta_start();
-
-    // Advertise as rtk.local + _ntrip._tcp for zero-config field discovery.
-    // NOTE(hw): needs a netif (WiFi via C6/ESP-Hosted or Ethernet) to be
-    // reachable — network bring-up is still TODO. Starting it now is harmless;
-    // it becomes discoverable the moment a netif comes up.
-    // TODO(product): per-unit unique hostname (e.g. rtk-<serial>) to avoid
-    // rtk.local collisions when several boxes share a field LAN.
-    net_mdns_start("rtk", CASTER_PORT, ADMIN_PORT);
-
     xTaskCreate(rtcm_feed_task, "rtcm_feed", 4096, NULL, 4, NULL);
+
+    // Bring up the USB->caster core BEFORE WiFi. This box exists to serve RTCM
+    // corrections offline, so its core data path (Mosaic USB -> sink -> caster)
+    // must never be gated behind the C6 WiFi coprocessor. esp_wifi_init() blocks
+    // (retrying the ESP-Hosted SDIO transport) whenever the C6 doesn't come up
+    // after reset; that used to hang app_main here before USB ever installed,
+    // bricking the caster on a WiFi-only fault. WiFi now runs async + last.
 
     // Enable USB-A VBUS BEFORE the host installs. On Tab5 the USB-A 5V rail is
     // gated by an I/O expander (PI4IOE #2, P3 = USB5V_EN); without this a device
@@ -113,8 +107,21 @@ void app_main(void)
                  esp_err_to_name(pwr));
     }
 
-    // USB host bring-up LAST: it blocks here until usb_host_install() completes,
-    // and on real hardware may hang/abort if the OTG PHY or VBUS isn't wired.
-    // Everything the operator needs to diagnose that is already running above.
+    // Install the USB host + CDC-ACM source. Blocks until usb_host_install()
+    // returns; on real hardware this succeeds (host=1). Kept ahead of WiFi so a
+    // dead C6 can never starve the caster of its byte source.
     ESP_ERROR_CHECK(usb_cdc_source_start());
+
+    // Advertise as rtk.local + _ntrip._tcp for zero-config field discovery.
+    // NOTE(hw): needs a netif (WiFi via C6/ESP-Hosted or Ethernet) to be
+    // reachable. Starting it now is harmless; it becomes discoverable the moment
+    // a netif comes up.
+    // TODO(product): per-unit unique hostname (e.g. rtk-<serial>) to avoid
+    // rtk.local collisions when several boxes share a field LAN.
+    net_mdns_start("rtk", CASTER_PORT, ADMIN_PORT);
+
+    // Join the field WiFi via the onboard C6 (ESP-Hosted/SDIO) — LAST, and on
+    // its OWN task (see wifi_sta.c): a flaky C6 costs us WiFi, not the caster.
+    // On GOT_IP it logs the address and starts the caster.
+    wifi_sta_start();
 }

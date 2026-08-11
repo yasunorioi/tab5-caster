@@ -97,21 +97,39 @@ static void nvs_ready(void)
     }
 }
 
-void wifi_sta_start(void)
+// SOFT_CHECK: log and bail out of the bring-up task instead of aborting the
+// whole box. WiFi runs on the flaky C6; a failure here must cost us WiFi, never
+// the USB->caster core (the reason this box exists offline).
+#define SOFT_CHECK(expr, what) do {                                            \
+        esp_err_t _e = (expr);                                                 \
+        if (_e != ESP_OK) {                                                    \
+            ESP_LOGE(TAG, "%s failed (%s) — C6 WiFi unavailable, caster core "  \
+                     "runs without it", (what), esp_err_to_name(_e));          \
+            vTaskDelete(NULL);                                                 \
+            return;                                                            \
+        }                                                                      \
+    } while (0)
+
+static void wifi_task(void *arg)
 {
+    (void)arg;
     nvs_ready();
     esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&wcfg));   // brings up the C6 link over SDIO
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(
-        WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, NULL, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(
-        IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, NULL, NULL));
+    // Brings up the C6 link over SDIO. BLOCKS here (ESP-Hosted transport retry)
+    // when the C6 doesn't come up after reset — which is exactly why this runs
+    // on its own task and not on app_main.
+    SOFT_CHECK(esp_wifi_init(&wcfg), "esp_wifi_init");
+    SOFT_CHECK(esp_event_handler_instance_register(
+        WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, NULL, NULL), "wifi event reg");
+    SOFT_CHECK(esp_event_handler_instance_register(
+        IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, NULL, NULL), "ip event reg");
 
     char ssid[64] = {0}, pass[64] = {0};
     if (!creds_load(ssid, sizeof(ssid), pass, sizeof(pass))) {
         ESP_LOGW(TAG, "no WiFi credentials — set them with: wifiset <ssid> <pass>");
+        vTaskDelete(NULL);
         return;  // C6 link is up; idle until provisioned + reboot.
     }
 
@@ -119,7 +137,18 @@ void wifi_sta_start(void)
     wifi_config_t sta = {0};
     strlcpy((char *)sta.sta.ssid, ssid, sizeof(sta.sta.ssid));
     strlcpy((char *)sta.sta.password, pass, sizeof(sta.sta.password));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    SOFT_CHECK(esp_wifi_set_mode(WIFI_MODE_STA), "esp_wifi_set_mode");
+    SOFT_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta), "esp_wifi_set_config");
+    SOFT_CHECK(esp_wifi_start(), "esp_wifi_start");
+    vTaskDelete(NULL);
+}
+
+void wifi_sta_start(void)
+{
+    // Non-blocking: WiFi bring-up runs on its own task. esp_wifi_init() blocks
+    // (retrying the ESP-Hosted SDIO transport) whenever the C6 coprocessor
+    // doesn't come up after reset; if that ran on app_main it would gate the
+    // USB->caster core. Isolating it means a dead C6 costs us WiFi, not the box.
+    // 6 KiB: esp_wifi_init + ESP-Hosted transport setup is stack-hungry.
+    xTaskCreate(wifi_task, "wifi_start", 6144, NULL, 5, NULL);
 }
