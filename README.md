@@ -61,8 +61,11 @@ fault brick the box — exactly the opposite of the offline-autonomy promise.
    — *no* ECM/RNDIS network interface. Which COM carries RTCM3 is a receiver-config
    choice (itf0 was silent, itf4 was an NMEA decoy, itf2 was RTCM3), so the driver
    **sweeps the three comm interfaces and latches the one whose bytes pass CRC-24Q**
-   (NMEA is auto-skipped). You must still **enable RTCM3 output on some COM in the
-   Mosaic config** (MSM7 + 1006/1005 + 1230), or every COM is silent.
+   (NMEA is auto-skipped). The box also **self-provisions the RTCM3 output** on
+   boot (see *Self-provisioning* below), so you no longer have to configure the
+   Mosaic by hand — but note only **USB1 (itf2)** answers commands; the first COM
+   (itf0) is silent both ways, so provisioning is attempted per-swept-interface
+   until one acks.
 2. **USB-A VBUS is gated by an I/O expander.** The 5V rail on the USB-A host port
    is switched by PI4IOE5V6408 #2 (I²C `0x44`, P3 = USB5V_EN, active-high) — see
    `board_power.c`. Without driving it the Mosaic is only trickle-powered and its
@@ -71,6 +74,39 @@ fault brick the box — exactly the opposite of the offline-autonomy promise.
    5V/2A source.
 3. **CDC-ACM host is callback-driven, not a POSIX fd** — hence the StreamBuffer
    instead of wrapping it as an `io.Stream` directly on the USB side.
+
+## Self-provisioning the Mosaic (flash-and-go)
+
+`mosaic_config.c` pushes the box's canonical RTCM3 base-station output config to
+the receiver on every boot, so a Mosaic with *any* saved state (even factory)
+starts streaming what the caster/FKP need — no operator config step. It sends one
+Septentrio command over the CDC command channel:
+
+```
+setRTCMv3Output, USB1, RTCM1006+RTCM1033+RTCM1230
+                     + RTCM1077+RTCM1087+RTCM1097+RTCM1107+RTCM1117+RTCM1127+RTCM1137   (MSM7, all GNSS)
+                     + RTCM1019+RTCM1020+RTCM1042+RTCM1044+RTCM1046                      (eph: GPS/GLO/BDS/QZSS/GAL)
+```
+
+Design notes, all verified on hardware via the `mosaic` passthrough:
+
+- **Current config only, never boot config.** Applied to the receiver's RAM, not
+  saved with `exeCopyConfigFile` — the box stays the source of truth and the
+  Mosaic's NVM (and its flash endurance) is left alone. The box re-applies each
+  power-up.
+- **Sent per-swept-interface until one acks.** `USB1` (itf2) accepts commands and
+  acks with `$R:`; itf0 is silent both ways (returns nothing → `ESP_ERR_TIMEOUT`
+  → retry on the next interface). The command targets `USB1` *by name*, so it
+  applies regardless of which COM carried it.
+- **Longer dwell right after a successful provision.** `setRTCMv3Output` restarts
+  the port's output; the stream reappears ~2.5 s later. The interface we just
+  acked on is almost certainly the data port, so we dwell 15 s (not 6 s) to catch
+  it instead of hopping away and circling back a full sweep.
+- **Best-effort, with fallback.** If provisioning fails, the box falls back to
+  whatever the Mosaic was already configured to stream. It never bricks the link.
+
+Verify with `rtcm`: after a cold boot the histogram shows MSM7 for every
+constellation plus `1019/1020/1042/1044/1046` — with no manual Mosaic setup.
 
 ## WiFi via the onboard ESP32-C6 (ESP-Hosted)
 
@@ -102,9 +138,10 @@ On-device REPL over the console (USB-Serial-JTAG, same USB-C port as
 | cmd | what |
 |-----|------|
 | `stats` | byte count, CRC-valid frame count, CRC fails, ms since last good frame |
-| `rtcm`  | monitor's message-type histogram — shows `1005/1077/1087/1097/1019` presence |
+| `rtcm`  | monitor's message-type histogram — shows obs (`1005/1077/1087/1097`) + ephemeris (`1019/1020/1042/1046`) presence |
 | `dump [n]` / `raw` | hexdump of the last CRC-valid frame / last raw bytes (spot NMEA decoys) |
 | `usb`   | USB host installed? device attached? CDC open? attached VID/PID + per-itf topology |
+| `mosaic <cmd>` | send a raw Septentrio command to the Mosaic + print the reply (e.g. `mosaic getRTCMv3Output`) — how the provisioning syntax was verified live |
 | `caster` | start the Zig ntripcaster (listener + local source) manually |
 | `csource` | caster's `/MOSAIC` source state (bytes/types via the tee) |
 | `wifiset <ssid> [pass]` / `wifireset` | set / erase WiFi creds in NVS (reboots) |
@@ -125,8 +162,12 @@ stray `0xD3` bytes. It's a permanent diagnostic tap — keep it after the caster
   tee; `/MOSAIC` source ingests live RTCM3.
 - **M2.5 — turnkey. ✅** C6 WiFi self-reset on cold boot → STA join → caster
   auto-start → network NTRIP client pulls live RTCM3 end-to-end, no operator input.
-- **M3 — cloud + UI.** Forward the base upstream to the cloud caster (FKP/VRS
-  synthesis); Tab5 MIPI-DSI status panel (sources / rover count / RTCM rate).
+- **M3-A — cloud upstream. ✅** Outbound NTRIP SOURCE push of the base RTCM3 to
+  the cloud caster (`/TAB5`), exp-backoff reconnect; `upstreamset` creds in NVS.
+- **M3-eph — ephemeris + self-provisioning. ✅** The box configures the Mosaic's
+  RTCM3 output itself on boot (MSM7 + 1006/1033/1230 + eph 1019/1020/1042/1044/
+  1046), verified from a no-eph receiver back to full eph with no manual setup.
+- **M3-B — UI.** Tab5 MIPI-DSI status panel (sources / rover count / RTCM rate).
 
 ## Discovery (mDNS)
 

@@ -4,7 +4,8 @@
 // (CRC-24Q) and tallies message types. This is the "is the Mosaic actually
 // sending the messages the caster needs?" check, on-device, without the caster.
 //
-// Answers questions like: are 1005/1077/1087/1097/1019 present? Are frames CRC-
+// Answers questions like: are 1005/1077/1087/1097 (obs) + 1019/1020 (eph)
+// present? Are frames CRC-
 // valid or is it noise? How long since the last good frame?
 
 #pragma once

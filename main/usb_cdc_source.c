@@ -17,6 +17,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/stream_buffer.h"
 #include "esp_log.h"
 #include <string.h>
 #include <stdio.h>
@@ -26,6 +27,7 @@
 
 #include "rtcm_sink.h"
 #include "rtcm_monitor.h"   // valid-RTCM3 gate for the interface sweep
+#include "mosaic_config.h"  // push RTCM3 output config to the receiver on attach
 
 static const char *TAG = "usb_cdc";
 
@@ -144,6 +146,14 @@ static void new_dev_cb(usb_device_handle_t usb_dev)
 
 static SemaphoreHandle_t s_disconnected;
 
+// The handle of the currently-open CDC interface, for command TX. NULL when no
+// interface is open. Set on open, cleared on close/disconnect.
+static volatile cdc_acm_dev_hdl_t s_cdc;
+
+// Set once we've pushed the RTCM3 output config to the attached Mosaic; reset on
+// disconnect so a freshly-plugged receiver gets provisioned again.
+static volatile bool s_provisioned;
+
 static void cdc_event_cb(const cdc_acm_host_dev_event_data_t *event, void *user_ctx)
 {
     switch (event->type) {
@@ -153,6 +163,8 @@ static void cdc_event_cb(const cdc_acm_host_dev_event_data_t *event, void *user_
     case CDC_ACM_HOST_DEVICE_DISCONNECTED:
         ESP_LOGW(TAG, "Mosaic disconnected");
         // Close on the driver's terms and let the open loop retry.
+        s_cdc = NULL;
+        s_provisioned = false;   // re-provision whatever gets plugged in next
         cdc_acm_host_close(event->data.cdc_hdl);
         s_status.cdc_open = false;
         xSemaphoreGive(s_disconnected);
@@ -169,13 +181,66 @@ static void cdc_event_cb(const cdc_acm_host_dev_event_data_t *event, void *user_
 // decide whether the bound COM is the one actually streaming RTCM3.
 static volatile uint32_t s_rx_since_open;
 
+// Command-reply capture: while s_cmd_capture is set, cdc_data_cb tees a COPY of
+// every received byte into s_cmd_rx so usb_cdc_send_command() can read the
+// Mosaic's ASCII reply. The bytes still go to rtcm_sink as usual, so capturing
+// never interrupts a live stream.
+static StreamBufferHandle_t s_cmd_rx;
+static volatile bool        s_cmd_capture;
+
 // The hot path. Runs in the CDC driver task context (NOT an ISR), so a
 // non-blocking StreamBuffer send is safe. Return true = we consumed the data.
 static bool cdc_data_cb(const uint8_t *data, size_t data_len, void *user_arg)
 {
     s_rx_since_open += data_len;
+    if (s_cmd_capture && s_cmd_rx) {
+        xStreamBufferSend(s_cmd_rx, data, data_len, 0);   // tee a copy; drop on full
+    }
     rtcm_sink_push(data, data_len);
     return true;
+}
+
+esp_err_t usb_cdc_send_command(const char *cmd, char *reply, size_t reply_max,
+                               size_t *reply_len, uint32_t timeout_ms)
+{
+    if (reply_len) *reply_len = 0;
+    cdc_acm_dev_hdl_t cdc = s_cdc;
+    if (cdc == NULL || cmd == NULL) return ESP_ERR_INVALID_STATE;
+
+    if (s_cmd_rx == NULL) {
+        s_cmd_rx = xStreamBufferCreate(2048, 1);
+        if (s_cmd_rx == NULL) return ESP_ERR_NO_MEM;
+    }
+    xStreamBufferReset(s_cmd_rx);
+    s_cmd_capture = true;
+
+    esp_err_t err = cdc_acm_host_data_tx_blocking(cdc, (const uint8_t *)cmd,
+                                                  strlen(cmd), timeout_ms);
+    if (err == ESP_OK) {
+        static const uint8_t crlf[2] = {'\r', '\n'};
+        err = cdc_acm_host_data_tx_blocking(cdc, crlf, sizeof(crlf), timeout_ms);
+    }
+
+    // Drain the reply: wait up to timeout_ms for the FIRST byte (a command port
+    // may be slow to answer), then read until a ~300 ms idle gap (reply complete
+    // on a silent port) or the buffer fills (a port also streaming RTCM3 never
+    // idles). Zero bytes after the full wait ⇒ this port isn't answering commands.
+    size_t got = 0;
+    if (reply && reply_max > 0) {
+        bool first = true;
+        while (got < reply_max - 1) {
+            TickType_t wait = pdMS_TO_TICKS(first ? timeout_ms : 300);
+            size_t n = xStreamBufferReceive(s_cmd_rx, (uint8_t *)reply + got,
+                                            reply_max - 1 - got, wait);
+            if (n == 0) break;
+            got += n;
+            first = false;
+        }
+        reply[got] = '\0';
+    }
+    if (reply_len) *reply_len = got;
+    s_cmd_capture = false;
+    return err;
 }
 
 static void cdc_task(void *arg)
@@ -217,6 +282,7 @@ static void cdc_task(void *arg)
             continue;
         }
         ESP_LOGI(TAG, "Mosaic CDC opened on itf=%d", itf);
+        s_cdc = cdc;
         s_status.cdc_open = true;
         s_status.cur_itf = itf;
         s_rx_since_open = 0;
@@ -225,16 +291,35 @@ static void cdc_task(void *arg)
         cdc_acm_host_line_coding_set(cdc, &lc);
         cdc_acm_host_set_control_line_state(cdc, /*dtr=*/true, /*rts=*/true);
 
+        // Self-provision the receiver's RTCM3 output (flash-and-go). Sent once per
+        // attach on the first interface we open; the command targets USB1 by name,
+        // so it applies no matter which COM this is — and on a factory-config
+        // Mosaic it's what makes USB1 start streaming for the sweep to latch.
+        bool provisioned_here = false;
+        if (!s_provisioned) {
+            if (mosaic_provision() == ESP_OK) {
+                s_provisioned = true;
+                provisioned_here = true;
+            } else {
+                ESP_LOGW(TAG, "provision failed; falling back to Mosaic saved config");
+            }
+        }
+
         // Dwell: latch on VALID RTCM3, not just any bytes. One Mosaic COM streams
         // NMEA @1Hz (confirmed on the bench), which would otherwise hijack the
         // sweep. Watch the monitor's CRC-valid frame count for an advance; raw
         // bytes alone (NMEA/echo) don't qualify. If nothing valid arrives, hop.
+        // When we JUST provisioned on this interface, dwell longer: the receiver
+        // takes a few seconds to (re)start its output after setRTCMv3Output, and
+        // this is very likely the data port (the ack came from it) — hopping away
+        // only to circle back wastes a full sweep before first latch.
+        int dwell_ms = provisioned_here ? 15000 : MOSAIC_SWEEP_DWELL_MS;
         rtcm_mon_stats_t base;
         rtcm_monitor_get(&base);
 
         bool disconnected = false;
         bool streaming = false;
-        for (int waited = 0; waited < MOSAIC_SWEEP_DWELL_MS; waited += 250) {
+        for (int waited = 0; waited < dwell_ms; waited += 250) {
             if (xSemaphoreTake(s_disconnected, pdMS_TO_TICKS(250)) == pdTRUE) {
                 disconnected = true;   // handle already closed by cdc_event_cb
                 break;
@@ -265,6 +350,7 @@ static void cdc_task(void *arg)
         // truly silent COM (0 B) from non-RTCM3 chatter like NMEA (>0 B). Hop.
         ESP_LOGW(TAG, "itf=%d no RTCM3 in %d ms (%lu raw B) — hopping",
                  itf, MOSAIC_SWEEP_DWELL_MS, (unsigned long)s_rx_since_open);
+        s_cdc = NULL;
         cdc_acm_host_close(cdc);
         s_status.cdc_open = false;
         s_status.cur_itf = 0xFF;

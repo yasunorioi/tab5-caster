@@ -2,7 +2,7 @@
 //
 // Commands (type `help` on the device):
 //   stats   RTCM byte/frame counters + CRC fails + staleness
-//   rtcm    message-type histogram (are 1005/1077/1087/1097/1019 present?)
+//   rtcm    message-type histogram (are 1005/1077/1087/1097 + 1019/1020 present?)
 //   dump    hexdump the last CRC-valid frame
 //   usb     USB host / CDC attach + VID/PID state
 //

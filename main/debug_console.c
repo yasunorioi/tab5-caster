@@ -60,8 +60,16 @@ static int cmd_rtcm(int argc, char **argv)
         case 1077: note = " (GPS MSM7)";     break;
         case 1087: note = " (GLONASS MSM7)"; break;
         case 1097: note = " (Galileo MSM7)"; break;
+        case 1107: note = " (SBAS MSM7)";    break;
+        case 1117: note = " (QZSS MSM7)";     break;
         case 1127: note = " (BeiDou MSM7 — caster relays, FKP ignores)"; break;
-        case 1019: note = " (GPS ephemeris — needed for FKP)"; break;
+        case 1137: note = " (NavIC MSM7)";    break;
+        case 1019: note = " (GPS ephemeris — needed for FKP)";      break;
+        case 1020: note = " (GLONASS ephemeris — needed for FKP)";  break;
+        case 1042: note = " (BeiDou ephemeris)";                    break;
+        case 1044: note = " (QZSS ephemeris)";                      break;
+        case 1045: note = " (Galileo F/NAV ephemeris)";            break;
+        case 1046: note = " (Galileo I/NAV ephemeris — needed for FKP)"; break;
         case 1033: note = " (rcv/ant descriptor)"; break;
         case 1230: note = " (GLONASS bias)"; break;
         default: break;
@@ -173,6 +181,46 @@ static int cmd_csource(int argc, char **argv)
     return 0;
 }
 
+static int cmd_mosaic(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("usage: mosaic <septentrio command>\n");
+        printf("  e.g. mosaic \\r\\n          (bare prompt -> reveals the port Cd)\n");
+        printf("       mosaic setRTCMv3Output, USB1, MSM7+RTCM1006+RTCM1019\n");
+        return 0;
+    }
+    // Rejoin argv[1..] with single spaces — the console splits on whitespace,
+    // but Septentrio commands carry spaces (e.g. "setRTCMv3Output, USB1, ...").
+    char cmd[224];
+    size_t pos = 0;
+    for (int i = 1; i < argc && pos < sizeof(cmd) - 1; i++) {
+        int w = snprintf(cmd + pos, sizeof(cmd) - pos, "%s%s",
+                         i > 1 ? " " : "", argv[i]);
+        if (w > 0) pos += (size_t)w;
+    }
+
+    char reply[1024];
+    size_t n = 0;
+    esp_err_t err = usb_cdc_send_command(cmd, reply, sizeof(reply), &n, 1500);
+    if (err == ESP_ERR_INVALID_STATE) {
+        printf("no Mosaic CDC interface open — check `usb`\n");
+        return 0;
+    }
+    if (err != ESP_OK) {
+        printf("command TX failed: %s\n", esp_err_to_name(err));
+        return 0;
+    }
+    // Non-printables → '.', so a Septentrio `$R:` reply stays legible even when
+    // RTCM3 binary from a streaming port is teed into the capture alongside it.
+    printf("--- reply (%u B) ---\n", (unsigned)n);
+    for (size_t i = 0; i < n; i++) {
+        char c = reply[i];
+        putchar((c == '\r' || c == '\n' || (c >= 0x20 && c < 0x7f)) ? c : '.');
+    }
+    printf("\n--- end ---\n");
+    return 0;
+}
+
 static int cmd_wifiset(int argc, char **argv)
 {
     if (argc < 2) {
@@ -240,6 +288,7 @@ static void register_cmds(void)
         { .command = "usb",   .help = "USB host / CDC attach state",          .func = cmd_usb   },
         { .command = "caster", .help = "start the Zig ntripcaster (listener + local source)", .func = cmd_caster },
         { .command = "csource", .help = "caster's /MOSAIC source state (bytes/types via the tee)", .func = cmd_csource },
+        { .command = "mosaic", .help = "send a raw Septentrio command to the Mosaic + print reply", .hint = "<command>", .func = cmd_mosaic },
         { .command = "wifiset", .help = "set WiFi creds + reboot to join: wifiset <ssid> [pass]", .hint = "<ssid> [pass]", .func = cmd_wifiset },
         { .command = "wifireset", .help = "erase stored WiFi creds + reboot", .func = cmd_wifireset },
         { .command = "upstreamset", .help = "push base RTCM3 to a cloud caster: upstreamset <host> <port> <mount> <pass>", .hint = "<host> <port> <mount> <pass>", .func = cmd_upstreamset },
@@ -256,7 +305,7 @@ void debug_console_start(void)
     esp_console_repl_t *repl = NULL;
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     repl_config.prompt = "tab5>";
-    repl_config.max_cmdline_length = 128;
+    repl_config.max_cmdline_length = 256;   // Septentrio cmd lines get long
 
     esp_console_register_help_command();
     register_cmds();

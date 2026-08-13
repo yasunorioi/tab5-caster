@@ -36,3 +36,17 @@ typedef struct {
 } usb_cdc_status_t;
 
 void usb_cdc_source_status(usb_cdc_status_t *out);
+
+// Send an ASCII command to the Mosaic over the currently-open CDC interface and
+// collect the receiver's reply. A CR/LF is appended. Bytes arriving while the
+// command is in flight are captured into `reply` (NUL-terminated, truncated to
+// reply_max-1); the capture ends after ~300 ms of silence or when `reply` fills.
+// Used by the `mosaic` console passthrough and by mosaic_provision().
+//   ESP_ERR_INVALID_STATE — no CDC interface open yet.
+// The Septentrio command interface is line-oriented and accepts commands on the
+// same port that streams data, so this works whether or not RTCM3 is flowing.
+// `reply_len` (may be NULL) receives the number of bytes captured — use it, not
+// strlen(reply), since a port that also streams RTCM3 can tee binary bytes (incl.
+// NUL) into the reply alongside the ASCII response.
+esp_err_t usb_cdc_send_command(const char *cmd, char *reply, size_t reply_max,
+                               size_t *reply_len, uint32_t timeout_ms);
