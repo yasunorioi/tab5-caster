@@ -42,8 +42,11 @@ static void rtcm_feed_task(void *arg)
         size_t n = rtcm_sink_read(buf, sizeof(buf), pdMS_TO_TICKS(1000));
         if (n) {
             rtcm_monitor_feed(buf, n);
-            // Tee the same bytes to the caster (no-op until `caster` is started).
+            // Tee the same bytes to the local caster and the cloud-upstream
+            // client. Both are no-ops until their consumers start draining
+            // (caster_start / upstream connected).
             rtcm_caster_push(buf, n);
+            rtcm_upstream_push(buf, n);
         }
         if (xTaskGetTickCount() - last_log > pdMS_TO_TICKS(5000)) {
             rtcm_mon_stats_t s;

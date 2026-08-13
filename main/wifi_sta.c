@@ -23,6 +23,7 @@
 #include "nvs.h"
 
 #include "caster.h"
+#include "upstream.h"
 
 static const char *TAG = "wifi";
 
@@ -82,7 +83,13 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
         ESP_LOGI(TAG, "got IP " IPSTR " — caster reachable on :2101 (rtk.local)",
                  IP2STR(&e->ip_info.ip));
-        if (!s_caster_started) { s_caster_started = true; caster_start(); }
+        if (!s_caster_started) {
+            s_caster_started = true;
+            caster_start();
+            // Start pushing the base RTCM3 to the cloud caster (idles until
+            // provisioned via `upstreamset`). Independent of the local caster.
+            upstream_start();
+        }
     }
 }
 

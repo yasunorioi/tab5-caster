@@ -34,3 +34,12 @@ size_t rtcm_sink_read(uint8_t *out, size_t max_len, TickType_t timeout);
 // is the blocking call the Zig local-source feeder makes (rtcm_caster_read).
 size_t rtcm_caster_push(const uint8_t *data, size_t len);
 size_t rtcm_caster_read(uint8_t *out, size_t max_len, TickType_t timeout);
+
+// ── cloud-upstream tee (third stage) ─────────────────────────────────────────
+// Same single-reader constraint as the caster tee: rtcm_feed_task pushes here,
+// and the upstream source-client task (upstream.c) drains it and streams the
+// bytes to the cloud caster via NTRIP SOURCE. Push is non-blocking (drops while
+// the link is down); reset drops the backlog on (re)connect.
+size_t rtcm_upstream_push(const uint8_t *data, size_t len);
+size_t rtcm_upstream_read(uint8_t *out, size_t max_len, TickType_t timeout);
+void rtcm_upstream_reset(void);

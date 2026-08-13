@@ -3,7 +3,9 @@
 #include "debug_console.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include "esp_console.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -12,6 +14,7 @@
 #include "rtcm_monitor.h"
 #include "usb_cdc_source.h"
 #include "caster.h"
+#include "upstream.h"
 #include "wifi_sta.h"
 
 static const char *TAG = "console";
@@ -189,6 +192,44 @@ static int cmd_wifireset(int argc, char **argv)
     return 0;
 }
 
+static int cmd_upstreamset(int argc, char **argv)
+{
+    if (argc < 5) {
+        printf("usage: upstreamset <host> <port> <mount> <password>\n");
+        printf("  e.g. upstreamset rtk.toiso.fit 2101 TAB5 <pw>\n");
+        return 0;
+    }
+    int port = atoi(argv[2]);
+    if (port <= 0 || port > 65535) { printf("bad port: %s\n", argv[2]); return 0; }
+    upstream_set_creds(argv[1], (uint16_t)port, argv[3], argv[4]);
+    printf("upstream creds saved (%s:%d /%s) — connecting on next cycle\n",
+           argv[1], port, argv[3]);
+    return 0;
+}
+
+static int cmd_upstream(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    upstream_status_t s;
+    upstream_status(&s);
+    printf("upstream: %s  provisioned=%d connected=%d\n",
+           s.last_msg, s.provisioned, s.connected);
+    if (s.provisioned) {
+        printf("  target=%s:%u /%s  sent=%llu B  reconnects=%lu\n",
+               s.host, s.port, s.mount,
+               (unsigned long long)s.bytes_sent, (unsigned long)s.reconnects);
+    }
+    return 0;
+}
+
+static int cmd_upstreamreset(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    upstream_forget();
+    printf("upstream credentials erased (task returns to idle)\n");
+    return 0;
+}
+
 static void register_cmds(void)
 {
     const esp_console_cmd_t cmds[] = {
@@ -201,6 +242,9 @@ static void register_cmds(void)
         { .command = "csource", .help = "caster's /MOSAIC source state (bytes/types via the tee)", .func = cmd_csource },
         { .command = "wifiset", .help = "set WiFi creds + reboot to join: wifiset <ssid> [pass]", .hint = "<ssid> [pass]", .func = cmd_wifiset },
         { .command = "wifireset", .help = "erase stored WiFi creds + reboot", .func = cmd_wifireset },
+        { .command = "upstreamset", .help = "push base RTCM3 to a cloud caster: upstreamset <host> <port> <mount> <pass>", .hint = "<host> <port> <mount> <pass>", .func = cmd_upstreamset },
+        { .command = "upstream", .help = "cloud-upstream link state", .func = cmd_upstream },
+        { .command = "upstreamreset", .help = "erase stored upstream creds", .func = cmd_upstreamreset },
     };
     for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {
         ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));
