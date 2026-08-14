@@ -42,6 +42,9 @@ static void st_set_msg(const char *msg)
 void upstream_status(upstream_status_t *out)
 {
     if (!out) return;
+    // The status UI may poll before upstream_start() (GOT_IP) has created the
+    // lock — report an empty (unprovisioned) status rather than taking a NULL sem.
+    if (!s_lock) { *out = (upstream_status_t){0}; return; }
     xSemaphoreTake(s_lock, portMAX_DELAY);
     *out = s_st;
     xSemaphoreGive(s_lock);

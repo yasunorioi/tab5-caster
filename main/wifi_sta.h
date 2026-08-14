@@ -8,6 +8,17 @@
 
 #pragma once
 
+#include <stdbool.h>
+
+// Snapshot of the WiFi link, for the status UI.
+typedef struct {
+    bool connected;     // GOT_IP received and still associated
+    char ssid[33];      // joined SSID (empty if no creds)
+    char ip[16];        // dotted IPv4 ("" until GOT_IP)
+} wifi_status_t;
+
+void wifi_sta_status(wifi_status_t *out);
+
 // Bring up WiFi STA from stored (NVS) credentials. If none are stored, the C6
 // link still comes up and the box idles until provisioned via wifi_set_creds().
 void wifi_sta_start(void);

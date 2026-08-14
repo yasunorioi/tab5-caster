@@ -1,0 +1,6 @@
+# Custom partition table — the default 1 MB single-app partition is too small
+# once LVGL + fonts are linked in. Tab5 has 16 MB flash; give the app 4 MB.
+# Name,     Type, SubType,  Offset,   Size
+nvs,        data, nvs,      ,         0x6000
+phy_init,   data, phy,      ,         0x1000
+factory,    app,  factory,  ,         0x400000

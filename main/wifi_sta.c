@@ -31,6 +31,20 @@ static const char *TAG = "wifi";
 
 static bool s_caster_started;
 
+// Live link snapshot for wifi_sta_status() (the status UI). Plain writes from
+// the event handler / bring-up task; a status read tolerates a torn field.
+static volatile bool s_connected;
+static char s_ssid[33];
+static char s_ip[16];
+
+void wifi_sta_status(wifi_status_t *out)
+{
+    if (!out) return;
+    out->connected = s_connected;
+    strlcpy(out->ssid, s_ssid, sizeof(out->ssid));
+    strlcpy(out->ip, s_ip, sizeof(out->ip));
+}
+
 // ── credential storage (NVS) ─────────────────────────────────────────────────
 
 static bool creds_load(char *ssid, size_t ssid_len, char *pass, size_t pass_len)
@@ -78,11 +92,14 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         esp_wifi_connect();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         ESP_LOGW(TAG, "disconnected — reconnecting");
+        s_connected = false;
         esp_wifi_connect();
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
         ESP_LOGI(TAG, "got IP " IPSTR " — caster reachable on :2101 (rtk.local)",
                  IP2STR(&e->ip_info.ip));
+        snprintf(s_ip, sizeof(s_ip), IPSTR, IP2STR(&e->ip_info.ip));
+        s_connected = true;
         if (!s_caster_started) {
             s_caster_started = true;
             caster_start();
@@ -141,6 +158,7 @@ static void wifi_task(void *arg)
     }
 
     ESP_LOGI(TAG, "joining '%s'", ssid);
+    strlcpy(s_ssid, ssid, sizeof(s_ssid));
     wifi_config_t sta = {0};
     strlcpy((char *)sta.sta.ssid, ssid, sizeof(sta.sta.ssid));
     strlcpy((char *)sta.sta.password, pass, sizeof(sta.sta.password));

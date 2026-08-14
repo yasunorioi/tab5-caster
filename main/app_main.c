@@ -24,6 +24,7 @@
 #include "board_power.h"
 #include "wifi_sta.h"
 #include "display.h"
+#include "status_screen.h"
 
 static const char *TAG = "tab5-caster";
 
@@ -120,8 +121,16 @@ void app_main(void)
     if (disp != ESP_OK) {
         ESP_LOGE(TAG, "display_init failed (%s) — running headless", esp_err_to_name(disp));
     } else {
-        display_fill(0x001F);      // blue = "panel alive, pre-UI"
+        // Pre-fill the panel with the UI's background colour (RGB565 of C_BG =
+        // 0x081420). LVGL only paints down to its content, so the area below stays
+        // this fill — matching it makes the whole screen a seamless background.
+        display_fill(0x08A4);
         display_backlight(80);
+        // LVGL status page (de-gated: a UI fault must not stall the caster).
+        esp_err_t ui = status_screen_start();
+        if (ui != ESP_OK) {
+            ESP_LOGE(TAG, "status_screen_start failed (%s)", esp_err_to_name(ui));
+        }
     }
 
     // Install the USB host + CDC-ACM source. Blocks until usb_host_install()

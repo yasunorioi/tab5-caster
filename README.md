@@ -167,7 +167,10 @@ stray `0xD3` bytes. It's a permanent diagnostic tap — keep it after the caster
 - **M3-eph — ephemeris + self-provisioning. ✅** The box configures the Mosaic's
   RTCM3 output itself on boot (MSM7 + 1006/1033/1230 + eph 1019/1020/1042/1044/
   1046), verified from a no-eph receiver back to full eph with no manual setup.
-- **M3-B — UI.** Tab5 MIPI-DSI status panel (sources / rover count / RTCM rate).
+- **M3-B — UI. ✅** Tab5 MIPI-DSI status panel (720x1280 ST7123/ILI9881C
+  auto-detect) with an LVGL status page — caster/rover count, RTCM rate + CRC +
+  constellations, WiFi/IP, cloud upstream — refreshed 1 Hz. De-gated: a panel or
+  UI fault can't stall the caster.
 
 ## Discovery (mDNS)
 
