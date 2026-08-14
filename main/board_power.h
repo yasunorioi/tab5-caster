@@ -12,6 +12,7 @@
 
 #include "esp_err.h"
 #include <stdbool.h>
+#include "driver/i2c_master.h"
 
 // Init the Tab5 system I2C bus + PI4IOE #2 and enable USB-A 5V (USB5V_EN).
 // Call before usb_cdc_source_start() so VBUS is up when the host installs.
@@ -21,3 +22,8 @@ esp_err_t board_power_init(void);
 // call after board_power_init(). Handy from the console for power-cycling a
 // wedged receiver.
 esp_err_t board_usb_5v_en(bool en);
+
+// The Tab5 system I2C bus (port 0, SDA=31/SCL=32), created by board_power_init().
+// Shared with the display's LCD-reset I/O expander (PI4IOE #1 @ 0x43). Returns
+// NULL before board_power_init(). Don't create a second master on this port.
+i2c_master_bus_handle_t board_i2c_bus(void);

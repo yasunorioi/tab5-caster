@@ -16,6 +16,9 @@
 #include "caster.h"
 #include "upstream.h"
 #include "wifi_sta.h"
+#include "display.h"
+#include "board_power.h"
+#include "driver/i2c_master.h"
 
 static const char *TAG = "console";
 
@@ -221,6 +224,50 @@ static int cmd_mosaic(int argc, char **argv)
     return 0;
 }
 
+static int cmd_i2cscan(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    i2c_master_bus_handle_t bus = board_i2c_bus();
+    if (!bus) { printf("board I2C bus not up\n"); return 0; }
+    printf("scanning Tab5 system I2C (SDA31/SCL32):\n");
+    int found = 0;
+    for (uint8_t a = 0x08; a <= 0x77; a++) {
+        if (i2c_master_probe(bus, a, 50) == ESP_OK) {
+            const char *hint = "";
+            switch (a) {
+            case 0x43: hint = " (PI4IOE #1 — LCD/TP/CAM reset)"; break;
+            case 0x44: hint = " (PI4IOE #2 — USB5V/WLAN)"; break;
+            case 0x5D: case 0x14: hint = " (GT911 touch — ILI9881C rev?)"; break;
+            case 0x48: hint = " (touch/other)"; break;
+            default: break;
+            }
+            printf("  0x%02X%s\n", a, hint);
+            found++;
+        }
+    }
+    printf("%d device(s)\n", found);
+    return 0;
+}
+
+static int cmd_disp(int argc, char **argv)
+{
+    // disp [red|green|blue|white|black|<hex RGB565>] [backlight%]
+    uint16_t c = 0xFFFF;
+    if (argc >= 2) {
+        if      (!strcmp(argv[1], "red"))   c = 0xF800;
+        else if (!strcmp(argv[1], "green")) c = 0x07E0;
+        else if (!strcmp(argv[1], "blue"))  c = 0x001F;
+        else if (!strcmp(argv[1], "white")) c = 0xFFFF;
+        else if (!strcmp(argv[1], "black")) c = 0x0000;
+        else c = (uint16_t)strtol(argv[1], NULL, 16);
+    }
+    int bl = (argc >= 3) ? atoi(argv[2]) : 100;
+    display_fill(c);
+    display_backlight(bl);
+    printf("filled 0x%04X, backlight %d%%\n", c, bl);
+    return 0;
+}
+
 static int cmd_wifiset(int argc, char **argv)
 {
     if (argc < 2) {
@@ -289,6 +336,8 @@ static void register_cmds(void)
         { .command = "caster", .help = "start the Zig ntripcaster (listener + local source)", .func = cmd_caster },
         { .command = "csource", .help = "caster's /MOSAIC source state (bytes/types via the tee)", .func = cmd_csource },
         { .command = "mosaic", .help = "send a raw Septentrio command to the Mosaic + print reply", .hint = "<command>", .func = cmd_mosaic },
+        { .command = "disp", .help = "fill the panel with a color (light-up test): disp <red|green|blue|white|black|hex> [bl%]", .hint = "[color] [bl%]", .func = cmd_disp },
+        { .command = "i2cscan", .help = "probe the Tab5 system I2C bus (identify touch IC -> panel rev)", .func = cmd_i2cscan },
         { .command = "wifiset", .help = "set WiFi creds + reboot to join: wifiset <ssid> [pass]", .hint = "<ssid> [pass]", .func = cmd_wifiset },
         { .command = "wifireset", .help = "erase stored WiFi creds + reboot", .func = cmd_wifireset },
         { .command = "upstreamset", .help = "push base RTCM3 to a cloud caster: upstreamset <host> <port> <mount> <pass>", .hint = "<host> <port> <mount> <pass>", .func = cmd_upstreamset },

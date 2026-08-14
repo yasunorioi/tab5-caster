@@ -16,3 +16,11 @@ dependencies:
   # M5Tab5-UserDemo) — a host/slave protocol mismatch breaks the link silently.
   espressif/esp_hosted: "1.4.0"
   espressif/esp_wifi_remote: "0.8.5"
+  # Tab5 5" MIPI-DSI status panel: ILI9881C vendor driver + LVGL binding.
+  # esp_lcd_mipi_dsi / esp_ldo_regulator are in-tree (P4-only). The Tab5 panel
+  # needs its own init table (tab5_ili9881c_init.c), passed via vendor_config.
+  # https://components.espressif.com/components/espressif/esp_lcd_ili9881c
+  espressif/esp_lcd_ili9881c: "^1.1.0"
+  # LVGL + the Espressif port glue (display flush + tick + task lock).
+  # https://components.espressif.com/components/espressif/esp_lvgl_port
+  espressif/esp_lvgl_port: "^2.3.0"

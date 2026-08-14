@@ -23,6 +23,7 @@
 #include "net_mdns.h"
 #include "board_power.h"
 #include "wifi_sta.h"
+#include "display.h"
 
 static const char *TAG = "tab5-caster";
 
@@ -108,6 +109,19 @@ void app_main(void)
     if (pwr != ESP_OK) {
         ESP_LOGE(TAG, "board_power_init failed (%s) — USB-A VBUS may be off",
                  esp_err_to_name(pwr));
+    }
+
+    // Bring up the MIPI-DSI status panel. De-gated like WiFi: a dead/absent panel
+    // returns an error here instead of aborting, so the USB->caster core still
+    // runs headless. Uses the board I2C bus (LCD-reset expander), so it must come
+    // after board_power_init(). A blue fill confirms the panel is alive before
+    // the LVGL status UI is wired.
+    esp_err_t disp = display_init();
+    if (disp != ESP_OK) {
+        ESP_LOGE(TAG, "display_init failed (%s) — running headless", esp_err_to_name(disp));
+    } else {
+        display_fill(0x001F);      // blue = "panel alive, pre-UI"
+        display_backlight(80);
     }
 
     // Install the USB host + CDC-ACM source. Blocks until usb_host_install()

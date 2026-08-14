@@ -10,7 +10,12 @@ idf_component_register(
         "board_power.c"
         "wifi_sta.c"
         "upstream.c"
+        "display.c"
+        "tab5_ili9881c_init.c"
+        "esp_lcd_st7123.c"
+        "tab5_st7123_init.c"
     INCLUDE_DIRS "."
     REQUIRES console esp_timer mdns esp_driver_i2c ntripcaster esp_netif esp_event
              esp_wifi esp_wifi_remote nvs_flash lwip
+             esp_lcd esp_lcd_ili9881c esp_driver_ledc esp_lvgl_port esp_mm
 )

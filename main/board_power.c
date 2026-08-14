@@ -47,6 +47,11 @@ static esp_err_t reg_write(uint8_t reg, uint8_t val)
     return i2c_master_transmit(s_pi4ioe2, buf, sizeof(buf), I2C_TIMEOUT_MS);
 }
 
+i2c_master_bus_handle_t board_i2c_bus(void)
+{
+    return s_bus;
+}
+
 esp_err_t board_usb_5v_en(bool en)
 {
     if (!s_pi4ioe2) return ESP_ERR_INVALID_STATE;
