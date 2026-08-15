@@ -335,7 +335,7 @@ static int cmd_upstreamset(int argc, char **argv)
 {
     if (argc < 5) {
         printf("usage: upstreamset <host> <port> <mount> <password>\n");
-        printf("  e.g. upstreamset rtk.toiso.fit 2101 TAB5 <pw>\n");
+        printf("  e.g. upstreamset <host> <port> <mount> <password>\n");
         return 0;
     }
     int port = atoi(argv[2]);

@@ -1,4 +1,9 @@
 // touch.c — see touch.h.
+//
+// The ST7123 register addresses / touch-data bit layout below follow the ESPHome
+// ST7123 touchscreen component (GPLv3) as a *register-map reference only* —
+// these are hardware facts dictated by the silicon; no ESPHome code was copied.
+// This file is original work, not a GPL derivative. See NOTICE.
 
 #include "touch.h"
 #include "board_power.h"   // board_i2c_bus()

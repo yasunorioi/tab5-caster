@@ -1,0 +1,37 @@
+tab5-caster
+Copyright (c) 2026 yasunorioi
+
+This product is licensed under either of Apache License 2.0 or MIT license,
+at your option (see LICENSE-APACHE and LICENSE-MIT).
+
+--------------------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------------------
+
+The following files are derived from third-party sources and retain their
+upstream licenses. They are compatible with the dual MIT/Apache-2.0 license of
+the rest of this project.
+
+* main/esp_lcd_st7123.c, main/esp_lcd_st7123.h
+    ESP LCD ST7123 panel driver.
+    Copyright (c) 2024 Espressif Systems (Shanghai) CO LTD.
+    SPDX-License-Identifier: Apache-2.0
+
+* main/tab5_st7123_init.c, main/tab5_ili9881c_init.c
+    Panel initialization command tables, copied verbatim from
+    m5stack/M5Tab5-UserDemo (https://github.com/m5stack/M5Tab5-UserDemo).
+    Copyright (c) 2025 M5Stack Technology CO LTD.
+    SPDX-License-Identifier: MIT
+
+--------------------------------------------------------------------------------
+Register-map references (no third-party code included)
+--------------------------------------------------------------------------------
+
+* main/touch.c
+    The ST7123 touch-controller register addresses and touch-data bit layout
+    follow the ESPHome ST7123 touchscreen component
+    (https://github.com/esphome/esphome), which is licensed under GPLv3. Only
+    the hardware register map — addresses and bit fields, which are functional
+    facts dictated by the silicon — was used as a reference; no ESPHome source
+    code was copied. This file is original work and is not a derivative of any
+    GPL-licensed code.
