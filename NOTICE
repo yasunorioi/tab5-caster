@@ -35,3 +35,19 @@ Register-map references (no third-party code included)
     facts dictated by the silicon — was used as a reference; no ESPHome source
     code was copied. This file is original work and is not a derivative of any
     GPL-licensed code.
+
+--------------------------------------------------------------------------------
+Linked component — affects distributed BINARIES (not this repo's source)
+--------------------------------------------------------------------------------
+
+The firmware statically links the Zig ntripcaster
+(https://github.com/yasunorioi/ntripcaster), a rewrite of BKG NtripCaster 0.1.5
+(ICECAST-derived), licensed under the GNU General Public License, Version 2.
+
+The source files in THIS repository are dual MIT/Apache-2.0 as stated above, but
+a COMPILED FIRMWARE BINARY that links ntripcaster is a combined work covered by
+GPLv2. Anyone who distributes such a binary — for example a pre-flashed product
+sold through a retailer — must comply with GPLv2, in particular by making the
+complete corresponding source available (at least on request). Building the
+firmware yourself for personal use imposes no such obligation.
+

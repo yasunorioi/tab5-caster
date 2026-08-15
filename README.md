@@ -262,3 +262,10 @@ Licensed under either of
 
 at your option. Third-party components (the Espressif ST7123 driver and the
 M5Stack panel init tables) retain their upstream licenses — see [NOTICE](NOTICE).
+
+**Built firmware is GPLv2.** The firmware statically links
+[ntripcaster](https://github.com/yasunorioi/ntripcaster) (a rewrite of BKG
+NtripCaster 0.1.5, **GPLv2**). This repository's own sources are dual
+MIT/Apache-2.0, but a *compiled binary* that links ntripcaster is a combined
+work under GPLv2 — distributing a pre-flashed product requires providing the
+corresponding source (GPLv2). Building it yourself for personal use does not.
