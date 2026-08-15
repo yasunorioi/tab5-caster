@@ -18,6 +18,7 @@
 #include "wifi_sta.h"
 #include "display.h"
 #include "backlight.h"
+#include "touch.h"
 #include "board_power.h"
 #include "driver/i2c_master.h"
 
@@ -250,6 +251,26 @@ static int cmd_i2cscan(int argc, char **argv)
     return 0;
 }
 
+static int cmd_touch(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    if (!touch_present()) {
+        printf("no touch controller (GT911 rev, or not up)\n");
+        return 0;
+    }
+    bool valid = false; int x = 0, y = 0;
+    esp_err_t err = touch_read_point(&valid, &x, &y);
+    if (err != ESP_OK) {
+        printf("touch read error: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+    int64_t idle_ms = (esp_timer_get_time() - touch_last_activity_us()) / 1000;
+    printf("touch: %s", valid ? "DOWN" : "up");
+    if (valid) printf("  x=%d y=%d", x, y);
+    printf("   last activity %lld ms ago\n", (long long)idle_ms);
+    return 0;
+}
+
 static int cmd_disp(int argc, char **argv)
 {
     // disp [red|green|blue|white|black|<hex RGB565>] [backlight%]
@@ -338,6 +359,7 @@ static void register_cmds(void)
         { .command = "csource", .help = "caster's /MOSAIC source state (bytes/types via the tee)", .func = cmd_csource },
         { .command = "mosaic", .help = "send a raw Septentrio command to the Mosaic + print reply", .hint = "<command>", .func = cmd_mosaic },
         { .command = "disp", .help = "fill the panel with a color (light-up test): disp <red|green|blue|white|black|hex> [bl%]", .hint = "[color] [bl%]", .func = cmd_disp },
+        { .command = "touch", .help = "read the touch point + idle time (idle-off test)", .func = cmd_touch },
         { .command = "i2cscan", .help = "probe the Tab5 system I2C bus (identify touch IC -> panel rev)", .func = cmd_i2cscan },
         { .command = "wifiset", .help = "set WiFi creds + reboot to join: wifiset <ssid> [pass]", .hint = "<ssid> [pass]", .func = cmd_wifiset },
         { .command = "wifireset", .help = "erase stored WiFi creds + reboot", .func = cmd_wifireset },

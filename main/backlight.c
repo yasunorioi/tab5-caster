@@ -8,6 +8,7 @@
 #include "esp_log.h"
 
 #include "rtcm_monitor.h"
+#include "touch.h"
 
 static const char *TAG = "backlight";
 
@@ -19,6 +20,7 @@ static const char *TAG = "backlight";
 #define BL_CLIMB_EVERY  3    // raise one step every N healthy seconds
 #define BL_FRESH_US     3000000  // RTCM3 "fresh" if a valid frame within 3 s
 #define BL_TICK_US      1000000  // 1 Hz
+#define BL_IDLE_OFF_S   180      // blank the panel after this long untouched
 
 static int      s_cur;                 // current applied brightness
 static int      s_ceiling = 100;       // max % believed safe this session
@@ -26,6 +28,8 @@ static int      s_healthy;             // consecutive healthy-stream ticks
 static uint64_t s_prev_frames;         // to detect valid-frame advance
 static bool     s_was_streaming;       // stream state last tick
 static bool     s_manual;              // console override active
+static bool     s_asleep;              // panel blanked by the idle timeout
+static int      s_presleep;            // brightness to restore on wake
 static esp_timer_handle_t s_timer;
 
 static void apply(int pct)
@@ -50,6 +54,31 @@ static void tick(void *arg)
     bool fresh = ms.last_frame_us && (now - ms.last_frame_us) < BL_FRESH_US;
     bool streaming = fresh && advancing;   // RTCM3 actively arriving
     s_prev_frames = ms.valid_frames;
+
+    // Idle blank: after a spell with no touch, turn the panel off entirely
+    // (it's a status display — nobody's watching). Any touch wakes it and
+    // restores the adaptive brightness. While blanked we skip the adaptive
+    // logic; the RTCM3 stream keeps flowing at 0% backlight (safest of all).
+    if (touch_present()) {
+        bool idle = (now - touch_last_activity_us()) >= (int64_t)BL_IDLE_OFF_S * 1000000;
+        if (idle) {
+            if (!s_asleep) {
+                s_asleep = true;
+                s_presleep = s_cur > 0 ? s_cur : BL_FLOOR;
+                display_backlight(0);
+                s_cur = 0;
+                ESP_LOGI(TAG, "idle %ds — panel off (tap to wake)", BL_IDLE_OFF_S);
+            }
+            s_was_streaming = streaming;   // keep state fresh for a clean wake
+            return;
+        }
+        if (s_asleep) {
+            s_asleep = false;
+            s_cur = -1;                    // force the restore write
+            apply(s_presleep);
+            ESP_LOGI(TAG, "touch — panel on (%d%%)", s_presleep);
+        }
+    }
 
     // Brownout: we were streaming, now the stream is gone. The current
     // brightness couldn't be sustained on this supply — cap the ceiling below
