@@ -15,6 +15,7 @@
 #include "caster.h"
 #include "upstream.h"
 #include "wifi_sta.h"
+#include "gnss_view.h"
 
 static const char *TAG = "status_ui";
 
@@ -74,6 +75,9 @@ static void build_ui(void)
     s_wifi   = mk_line(scr);
     s_cloud  = mk_line(scr);
     s_mosaic = mk_line(scr);
+
+    // GNSS skyplot + C/N0 bars below the status lines (portrait has the room).
+    gnss_view_build(scr);
 }
 
 // Build a compact present-constellations string from the monitor's type tally.
@@ -179,6 +183,8 @@ static void refresh_cb(lv_timer_t *t)
     s_prev_frames  = ms.valid_frames;
     s_prev_up_bytes = u.bytes_sent;
     s_prev_us      = now;
+
+    gnss_view_update();   // skyplot + C/N0 bars from the NMEA snapshot
 }
 
 esp_err_t status_screen_start(void)
