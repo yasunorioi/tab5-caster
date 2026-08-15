@@ -347,6 +347,22 @@ static int cmd_upstreamreset(int argc, char **argv)
     return 0;
 }
 
+static int cmd_wifidrop(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    printf("forcing WiFi disconnect — watch for reconnect + GOT_IP\n");
+    wifi_sta_drop();
+    return 0;
+}
+
+static int cmd_upstreamdrop(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    printf("forcing cloud-upstream drop — watch for backoff reconnect\n");
+    upstream_drop();
+    return 0;
+}
+
 static void register_cmds(void)
 {
     const esp_console_cmd_t cmds[] = {
@@ -363,6 +379,8 @@ static void register_cmds(void)
         { .command = "i2cscan", .help = "probe the Tab5 system I2C bus (identify touch IC -> panel rev)", .func = cmd_i2cscan },
         { .command = "wifiset", .help = "set WiFi creds + reboot to join: wifiset <ssid> [pass]", .hint = "<ssid> [pass]", .func = cmd_wifiset },
         { .command = "wifireset", .help = "erase stored WiFi creds + reboot", .func = cmd_wifireset },
+        { .command = "wifidrop", .help = "force a STA disconnect (reconnect test)", .func = cmd_wifidrop },
+        { .command = "upstreamdrop", .help = "force a cloud-upstream drop (backoff reconnect test)", .func = cmd_upstreamdrop },
         { .command = "upstreamset", .help = "push base RTCM3 to a cloud caster: upstreamset <host> <port> <mount> <pass>", .hint = "<host> <port> <mount> <pass>", .func = cmd_upstreamset },
         { .command = "upstream", .help = "cloud-upstream link state", .func = cmd_upstream },
         { .command = "upstreamreset", .help = "erase stored upstream creds", .func = cmd_upstreamreset },

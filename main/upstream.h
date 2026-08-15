@@ -26,6 +26,11 @@ void upstream_set_creds(const char *host, uint16_t port,
 // Erase stored upstream credentials (the task returns to idle on next cycle).
 void upstream_forget(void);
 
+// Force-drop the current cloud connection to exercise the backoff/reconnect path
+// (the `upstreamdrop` console command). The task reconnects on its next cycle —
+// a reconnect test hook for the bench and the field. No effect if not connected.
+void upstream_drop(void);
+
 typedef struct {
     bool     provisioned;   // creds present in NVS
     bool     connected;     // SOURCE handshake done, streaming
