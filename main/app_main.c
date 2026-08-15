@@ -19,6 +19,7 @@
 #include "rtcm_sink.h"
 #include "rtcm_monitor.h"
 #include "usb_cdc_source.h"
+#include "nmea_source.h"
 #include "debug_console.h"
 #include "net_mdns.h"
 #include "board_power.h"
@@ -147,6 +148,10 @@ void app_main(void)
     // returns; on real hardware this succeeds (host=1). Kept ahead of WiFi so a
     // dead C6 can never starve the caster of its byte source.
     ESP_ERROR_CHECK(usb_cdc_source_start());
+
+    // Read-only NMEA (GGA+GSV) on the Mosaic's second COM (itf4) for the panel's
+    // GNSS view — independent of the RTCM3 caster path on itf2.
+    nmea_source_start();
 
     // Advertise as rtk.local + _ntrip._tcp for zero-config field discovery.
     // NOTE(hw): needs a netif (WiFi via C6/ESP-Hosted or Ethernet) to be

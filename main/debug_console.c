@@ -19,6 +19,7 @@
 #include "display.h"
 #include "backlight.h"
 #include "touch.h"
+#include "nmea_source.h"
 #include "board_power.h"
 #include "driver/i2c_master.h"
 
@@ -271,6 +272,27 @@ static int cmd_touch(int argc, char **argv)
     return 0;
 }
 
+static int cmd_nmea(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    nmea_status_t s;
+    nmea_source_status(&s);
+    printf("nmea itf4=%s  %lu B  GGA=%lu GSV=%lu  sats=%u\n",
+           s.itf_open ? "open" : "closed", (unsigned long)s.bytes,
+           (unsigned long)s.gga_sentences, (unsigned long)s.gsv_sentences,
+           s.sat_count);
+    if (s.gga_sentences)
+        printf("  GGA: lat=%.6f lon=%.6f fixq=%d sats=%d\n",
+               s.lat, s.lon, s.fix_quality, s.gga_sats);
+    for (uint8_t i = 0; i < s.sat_count; i++) {
+        printf("  %c%02u  el=%3d az=%3d cn0=%2d\n",
+               s.sats[i].talker, s.sats[i].prn,
+               s.sats[i].elev, s.sats[i].azim, s.sats[i].cn0);
+    }
+    if (s.last_line[0]) printf("  last: %s\n", s.last_line);
+    return 0;
+}
+
 static int cmd_disp(int argc, char **argv)
 {
     // disp [red|green|blue|white|black|<hex RGB565>] [backlight%]
@@ -376,6 +398,7 @@ static void register_cmds(void)
         { .command = "mosaic", .help = "send a raw Septentrio command to the Mosaic + print reply", .hint = "<command>", .func = cmd_mosaic },
         { .command = "disp", .help = "fill the panel with a color (light-up test): disp <red|green|blue|white|black|hex> [bl%]", .hint = "[color] [bl%]", .func = cmd_disp },
         { .command = "touch", .help = "read the touch point + idle time (idle-off test)", .func = cmd_touch },
+        { .command = "nmea", .help = "itf4 NMEA state: GGA/GSV counts + per-sat el/az/cn0", .func = cmd_nmea },
         { .command = "i2cscan", .help = "probe the Tab5 system I2C bus (identify touch IC -> panel rev)", .func = cmd_i2cscan },
         { .command = "wifiset", .help = "set WiFi creds + reboot to join: wifiset <ssid> [pass]", .hint = "<ssid> [pass]", .func = cmd_wifiset },
         { .command = "wifireset", .help = "erase stored WiFi creds + reboot", .func = cmd_wifireset },
