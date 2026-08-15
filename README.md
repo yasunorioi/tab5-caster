@@ -69,9 +69,12 @@ fault brick the box — exactly the opposite of the offline-autonomy promise.
 2. **USB-A VBUS is gated by an I/O expander.** The 5V rail on the USB-A host port
    is switched by PI4IOE5V6408 #2 (I²C `0x44`, P3 = USB5V_EN, active-high) — see
    `board_power.c`. Without driving it the Mosaic is only trickle-powered and its
-   D+ pull-up never rises, so it never enumerates. Brownout is the next wall: a
-   soft PC-USB supply + Mosaic load sags the 5V rail; feed the box from a stiff
-   5V/2A source.
+   D+ pull-up never rises, so it never enumerates. **Brownout is real:** the panel
+   backlight shares this rail, and at full brightness a soft PC-USB supply + Mosaic
+   streaming load sags it enough to drop the receiver off the bus (`CDC error`, no
+   RTCM3). `backlight.c` mitigates this by holding brightness low until the stream
+   is up and only climbing as far as the supply sustains (see M3-C) — but a stiff
+   5V/2A source is still the right answer in the field.
 3. **CDC-ACM host is callback-driven, not a POSIX fd** — hence the StreamBuffer
    instead of wrapping it as an `io.Stream` directly on the USB side.
 
@@ -171,6 +174,14 @@ stray `0xD3` bytes. It's a permanent diagnostic tap — keep it after the caster
   auto-detect) with an LVGL status page — caster/rover count, RTCM rate + CRC +
   constellations, WiFi/IP, cloud upstream — refreshed 1 Hz. De-gated: a panel or
   UI fault can't stall the caster.
+- **M3-C — power-aware panel. ✅** The panel LED string and the Mosaic's USB-A 5V
+  share a supply, so a fixed-brightness backlight browned the receiver off the
+  bus (no RTCM3) on a thin supply — a latent M3-B regression. `backlight.c` now
+  holds a safe floor until RTCM3 streams, then climbs toward target only as the
+  supply proves it can sustain it, learning a session ceiling on any real (stale)
+  stream drop — auto-calibrating, no hard cap. Plus idle-off: the ST7123 touch
+  (@0x55, 10 Hz activity poll) blanks the panel after 3 min untouched and wakes
+  it on a tap; the RTCM3 stream keeps flowing at 0% backlight while blanked.
 
 ## Discovery (mDNS)
 
