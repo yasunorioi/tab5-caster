@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "app_main.c"
         "usb_cdc_source.c"
+        "nmea_source.c"
         "mosaic_config.c"
         "rtcm_sink.c"
         "rtcm_monitor.c"

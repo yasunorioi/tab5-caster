@@ -25,6 +25,16 @@ static const char *TAG = "mosaic_cfg";
     "RTCM1077+RTCM1087+RTCM1097+RTCM1107+RTCM1117+RTCM1127+RTCM1137+" \
     "RTCM1019+RTCM1020+RTCM1042+RTCM1044+RTCM1046"
 
+// NMEA for the on-panel GNSS view (skyplot + C/N0 bars). GSV carries per-
+// satellite azimuth/elevation/SNR; GGA carries the base position. Emitted on a
+// SEPARATE port (USB2 = itf4) so the RTCM3 caster stream on USB1 stays pure —
+// the box opens itf4 read-only for display (see nmea_source.c). USB2 by name, so
+// it applies regardless of which command interface we send it on.
+#define NMEA_PORT   "USB2"
+#define NMEA_STREAM "Stream1"
+#define NMEA_MSGS   "GGA+GSV"
+#define NMEA_RATE   "sec1"
+
 // Find `needle` in the first `len` bytes of `hay` (which may contain NUL/binary,
 // since a reply captured from a streaming port carries teed RTCM3 bytes).
 static bool buf_contains(const char *hay, size_t len, const char *needle)
@@ -35,6 +45,28 @@ static bool buf_contains(const char *hay, size_t len, const char *needle)
         if (memcmp(hay + i, needle, nlen) == 0) return true;
     }
     return false;
+}
+
+// Best-effort: enable GGA+GSV on USB2 for the panel's GNSS view. Sent on the
+// command channel (USB1/itf2); targets USB2 by name. Logs only — a failure here
+// costs the display feature, never the RTCM3 caster path.
+static void provision_nmea(void)
+{
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd),
+             "setNMEAOutput, " NMEA_STREAM ", " NMEA_PORT ", " NMEA_MSGS ", " NMEA_RATE);
+    char reply[256];
+    size_t n = 0;
+    esp_err_t err = usb_cdc_send_command(cmd, reply, sizeof(reply), &n, 2000);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "NMEA provision TX failed: %s", esp_err_to_name(err));
+        return;
+    }
+    if (buf_contains(reply, n, "$R?")) {
+        ESP_LOGW(TAG, "Mosaic rejected the NMEA config ($R?)");
+        return;
+    }
+    ESP_LOGI(TAG, "Mosaic NMEA output provisioned on " NMEA_PORT " (" NMEA_MSGS ")");
 }
 
 esp_err_t mosaic_provision(void)
@@ -67,8 +99,10 @@ esp_err_t mosaic_provision(void)
         // Bytes but no ack — likely buried under RTCM3 binary on an already-
         // streaming port. The command almost certainly applied; best-effort OK.
         ESP_LOGW(TAG, "no $R: ack in %u B reply (buried in stream?) — assuming applied", (unsigned)n);
+        provision_nmea();
         return ESP_OK;
     }
     ESP_LOGI(TAG, "Mosaic RTCM3 output provisioned on " RTCM_PORT " (MSM7 + eph)");
+    provision_nmea();
     return ESP_OK;
 }
