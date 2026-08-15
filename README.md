@@ -182,6 +182,12 @@ stray `0xD3` bytes. It's a permanent diagnostic tap — keep it after the caster
   stream drop — auto-calibrating, no hard cap. Plus idle-off: the ST7123 touch
   (@0x55, 10 Hz activity poll) blanks the panel after 3 min untouched and wakes
   it on a tap; the RTCM3 stream keeps flowing at 0% backlight while blanked.
+- **M3-D — GNSS view. ✅** A second read-only CDC interface (itf4 = USB2) parses
+  the Mosaic's GGA + GSV (self-provisioned alongside RTCM3), never touching the
+  caster path. `gnss_view.c` renders it: a skyplot (horizon + 30°/60° rings +
+  N/E/S/W, a constellation-coloured dot per satellite) and a C/N0 bar strip with
+  per-bar PRN labels. Dots/bars are absolute-positioned — a per-tick flex
+  relayout of ~30 bars tripped the LVGL task watchdog.
 
 ## Discovery (mDNS)
 
