@@ -201,6 +201,46 @@ The Zig caster is cross-compiled into `components/ntripcaster/` by the IDF build
 (`zig build caster-lib -Dio-backend=lwip …`); its CMake rule re-runs when any
 `~/ntripcaster/src/*.zig` changes.
 
+## Field reconnect test (#3)
+
+The reconnect state machines (WiFi STA, cloud upstream, Mosaic re-latch) are
+verified on the bench with the `wifidrop` / `upstreamdrop` console hooks; the
+same hooks reproduce the scenarios in the field, where the real stressors live
+(Starlink IPv6 rotation, long-range WiFi under weather, generator/contactor EMI).
+
+Open the console over the USB-C port (`idf.py monitor`, or any serial term at
+115200) and confirm the baseline first:
+
+```
+wifi        # connected=1, has an IP
+upstream    # connected=1, streaming, note the reconnects count
+stats       # valid_frames rising, crc_fails=0
+```
+
+Then exercise each path and watch it recover:
+
+```
+upstreamdrop   # cloud SOURCE socket closed → backoff reconnect
+               #   expect: "connected … /TAB5 — streaming", reconnects +1
+wifidrop       # STA disassociated → auto-reconnect
+               #   expect: "disconnected — reconnecting" → "got IP" (~seconds)
+```
+
+After either drop — and after any real outage — `stats` must keep advancing
+(the RTCM3 core streams throughout) and a rover must be able to `GET /MOSAIC`
+again (the caster listener survives the reconnect).
+
+**Expect a mount-reclaim delay.** After a reboot or a WiFi drop, the cloud
+caster still holds the previous `/TAB5` SOURCE until it times out, so the box
+sees `SOURCE rejected: ERROR - Mount already in use` and retries with backoff
+for ~30–45 s before it reconnects. This is normal NTRIP v1 behavior, not a
+fault; it self-heals. (A future NTRIP v2 / timestamped mount would shorten it.)
+
+For the stressors that only the field exercises, leave the box deployed and
+poll `upstream` / `wifi` / `stats` over hours — a climbing `reconnects` with the
+stream still healthy is the link recovering as designed; a stalled `stats` with
+a stuck backoff is the thing to capture.
+
 ## Related
 
 - `~/ntripcaster` — the Zig caster. Branch `phase8-esp32p4-io-abstraction` adds
