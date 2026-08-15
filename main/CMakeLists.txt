@@ -11,6 +11,8 @@ idf_component_register(
         "wifi_sta.c"
         "upstream.c"
         "display.c"
+        "backlight.c"
+        "touch.c"
         "tab5_ili9881c_init.c"
         "esp_lcd_st7123.c"
         "tab5_st7123_init.c"

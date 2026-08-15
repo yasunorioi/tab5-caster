@@ -24,6 +24,8 @@
 #include "board_power.h"
 #include "wifi_sta.h"
 #include "display.h"
+#include "backlight.h"
+#include "touch.h"
 #include "status_screen.h"
 
 static const char *TAG = "tab5-caster";
@@ -125,7 +127,15 @@ void app_main(void)
         // 0x081420). LVGL only paints down to its content, so the area below stays
         // this fill — matching it makes the whole screen a seamless background.
         display_fill(0x08A4);
-        display_backlight(80);
+        // Touch activity source for the idle backlight-off (needs the panel's
+        // TP_RST released by display_init). Absent on the GT911 rev — then
+        // idle-off just stays disabled.
+        touch_init();
+        // Adaptive backlight: hold a safe floor until RTCM3 is streaming, then
+        // climb toward target only as the supply proves it can sustain it. A
+        // fixed 80% here browns out the Mosaic on a thin supply (M3-B finding).
+        // Also blanks the panel after an idle spell (wakes on touch).
+        backlight_auto_start();
         // LVGL status page (de-gated: a UI fault must not stall the caster).
         esp_err_t ui = status_screen_start();
         if (ui != ESP_OK) {
