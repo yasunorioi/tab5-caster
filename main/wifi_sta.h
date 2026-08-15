@@ -23,6 +23,11 @@ void wifi_sta_status(wifi_status_t *out);
 // link still comes up and the box idles until provisioned via wifi_set_creds().
 void wifi_sta_start(void);
 
+// Force a STA disconnect to exercise the auto-reconnect path (the `wifidrop`
+// console command). The event handler re-associates immediately — a reconnect
+// test hook, usable on the bench and in the field. No effect if WiFi isn't up.
+void wifi_sta_drop(void);
+
 // Store credentials and reboot to join (the `wifiset` console command).
 void wifi_set_creds(const char *ssid, const char *pass);
 

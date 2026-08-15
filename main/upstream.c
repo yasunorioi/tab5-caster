@@ -30,6 +30,7 @@ static const char *TAG = "upstream";
 static SemaphoreHandle_t s_lock;
 static upstream_status_t s_st;   // guarded by s_lock
 static bool s_started;
+static volatile bool s_force_drop;   // set by upstream_drop() to break the stream
 
 // ── status helpers ───────────────────────────────────────────────────────────
 static void st_set_msg(const char *msg)
@@ -76,6 +77,12 @@ void upstream_forget(void)
         nvs_close(h);
     }
     ESP_LOGW(TAG, "upstream credentials erased");
+}
+
+void upstream_drop(void)
+{
+    ESP_LOGW(TAG, "forced upstream drop (test) — reconnect with backoff should follow");
+    s_force_drop = true;
 }
 
 // Load creds into locals + publish host/port/mount into status. Returns false if
@@ -176,6 +183,11 @@ static void stream_loop(int sock)
     rtcm_upstream_reset();
     uint8_t buf[1024];
     for (;;) {
+        if (s_force_drop) {           // `upstreamdrop` test hook
+            s_force_drop = false;
+            st_set_msg("forced drop (test) — reconnecting");
+            return;
+        }
         size_t n = rtcm_upstream_read(buf, sizeof(buf), pdMS_TO_TICKS(1000));
         if (n == 0) continue;   // no RTCM this second; keep the link open
         if (!send_all(sock, buf, n)) {
@@ -217,6 +229,9 @@ static void upstream_task(void *arg)
 
         if (!source_handshake(sock, mount, pass)) {
             close(sock);
+            xSemaphoreTake(s_lock, portMAX_DELAY);
+            s_st.connected = false; s_st.reconnects++;   // count rejected retries too
+            xSemaphoreGive(s_lock);
             vTaskDelay(pdMS_TO_TICKS(backoff * 1000));
             backoff = (backoff * 2 > BACKOFF_MAX_S) ? BACKOFF_MAX_S : backoff * 2;
             continue;

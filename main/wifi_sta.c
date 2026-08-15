@@ -57,6 +57,12 @@ static bool creds_load(char *ssid, size_t ssid_len, char *pass, size_t pass_len)
     return ok && ssid[0] != '\0';
 }
 
+void wifi_sta_drop(void)
+{
+    ESP_LOGW(TAG, "forced STA disconnect (test) — auto-reconnect should follow");
+    esp_wifi_disconnect();   // → WIFI_EVENT_STA_DISCONNECTED → esp_wifi_connect()
+}
+
 void wifi_set_creds(const char *ssid, const char *pass)
 {
     nvs_handle_t h;
