@@ -25,8 +25,7 @@ static const char *TAG = "backlight";
 static int      s_cur;                 // current applied brightness
 static int      s_ceiling = 100;       // max % believed safe this session
 static int      s_healthy;             // consecutive healthy-stream ticks
-static uint64_t s_prev_frames;         // to detect valid-frame advance
-static bool     s_was_streaming;       // stream state last tick
+static bool     s_was_streaming;       // stream alive last tick
 static bool     s_manual;              // console override active
 static bool     s_asleep;              // panel blanked by the idle timeout
 static int      s_presleep;            // brightness to restore on wake
@@ -50,10 +49,12 @@ static void tick(void *arg)
     rtcm_monitor_get(&ms);
     int64_t now = esp_timer_get_time();
 
-    bool advancing = ms.valid_frames > s_prev_frames;
-    bool fresh = ms.last_frame_us && (now - ms.last_frame_us) < BL_FRESH_US;
-    bool streaming = fresh && advancing;   // RTCM3 actively arriving
-    s_prev_frames = ms.valid_frames;
+    // "Alive" = a CRC-valid RTCM3 frame arrived within the last few seconds.
+    // Staleness — not per-tick frame *advance* — is the brownout signal: a real
+    // drop stops the stream, which goes stale. Requiring an advance every 1 Hz
+    // tick aliased against the ~1 Hz RTCM cadence and fired false brownouts even
+    // while the stream was healthy, ratcheting the ceiling down to the floor.
+    bool alive = ms.last_frame_us && (now - ms.last_frame_us) < BL_FRESH_US;
 
     // Idle blank: after a spell with no touch, turn the panel off entirely
     // (it's a status display — nobody's watching). Any touch wakes it and
@@ -69,7 +70,7 @@ static void tick(void *arg)
                 s_cur = 0;
                 ESP_LOGI(TAG, "idle %ds — panel off (tap to wake)", BL_IDLE_OFF_S);
             }
-            s_was_streaming = streaming;   // keep state fresh for a clean wake
+            s_was_streaming = alive;       // keep state fresh for a clean wake
             return;
         }
         if (s_asleep) {
@@ -80,10 +81,10 @@ static void tick(void *arg)
         }
     }
 
-    // Brownout: we were streaming, now the stream is gone. The current
+    // Brownout: we were streaming, now the stream has gone stale. The current
     // brightness couldn't be sustained on this supply — cap the ceiling below
     // it and fall to the floor so the receiver has headroom to re-latch.
-    if (s_was_streaming && !streaming) {
+    if (s_was_streaming && !alive) {
         // Back off well below where it failed: the brownout edge is noisy (a
         // level can hold for seconds before dropping), so a wide margin makes it
         // converge to a stable brightness in one or two cycles, not a slow walk.
@@ -98,7 +99,7 @@ static void tick(void *arg)
         return;
     }
 
-    if (!streaming) {
+    if (!alive) {
         // Not latched yet (boot / between sweeps) — hold the floor so the
         // receiver can always enumerate and start output.
         apply(BL_FLOOR);
