@@ -192,7 +192,12 @@ a product TODO to avoid `.local` collisions on a shared LAN.
 
 ## Build (on a machine with ESP-IDF 5.4+)
 
+The firmware links the Zig **[ntripcaster](https://github.com/yasunorioi/ntripcaster)**,
+which is **not vendored here** — clone it as a sibling at `~/ntripcaster` first
+(the build reads `$HOME/ntripcaster`; a Zig toolchain is required):
+
 ```sh
+git clone https://github.com/yasunorioi/ntripcaster ~/ntripcaster
 idf.py set-target esp32p4
 idf.py build flash monitor      # flash over the USB-C port (USB-Serial-JTAG)
 ```
@@ -243,7 +248,17 @@ a stuck backoff is the thing to capture.
 
 ## Related
 
-- `~/ntripcaster` — the Zig caster. Branch `phase8-esp32p4-io-abstraction` adds
-  the `io.Stream`/`io.Address` + `os.*` thread/sync backend seam and
-  `-Dio-backend=posix|lwip`, plus the `embedded.zig` C-ABI entry the firmware links.
-- `~/rtkserver` — the base-kit product concept (Mosaic-go + M5 + PoE).
+- **[ntripcaster](https://github.com/yasunorioi/ntripcaster)** — the Zig caster
+  the firmware links (clone to `~/ntripcaster`). The `io.Stream`/`io.Address` +
+  `os.*` thread/sync backend seam and `-Dio-backend=posix|lwip` add the
+  `embedded.zig` C-ABI entry the firmware links.
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option. Third-party components (the Espressif ST7123 driver and the
+M5Stack panel init tables) retain their upstream licenses — see [NOTICE](NOTICE).

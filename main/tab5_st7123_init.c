@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 M5Stack Technology CO LTD (init table; see NOTICE).
+//
 // tab5_st7123_init.c — see tab5_st7123_init.h.
 //
 // Copied VERBATIM from M5Tab5-UserDemo (platforms/tab5/components/m5stack_tab5/

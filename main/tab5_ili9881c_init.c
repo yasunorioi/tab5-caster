@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 M5Stack Technology CO LTD (init table; see NOTICE).
+//
 // tab5_ili9881c_init.c — ILI9881C panel init sequence for the M5Stack Tab5
 // 5" 720x1280 MIPI-DSI panel. Copied VERBATIM from M5Tab5-UserDemo
 // (platforms/tab5/components/m5stack_tab5/include/bsp/ili9881_init_data.c):
