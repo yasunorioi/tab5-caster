@@ -17,6 +17,7 @@
 #include "upstream.h"
 #include "wifi_sta.h"
 #include "display.h"
+#include "backlight.h"
 #include "board_power.h"
 #include "driver/i2c_master.h"
 
@@ -263,7 +264,7 @@ static int cmd_disp(int argc, char **argv)
     }
     int bl = (argc >= 3) ? atoi(argv[2]) : 100;
     display_fill(c);
-    display_backlight(bl);
+    backlight_manual(bl);   // set + suspend the adaptive controller (debug)
     printf("filled 0x%04X, backlight %d%%\n", c, bl);
     return 0;
 }
