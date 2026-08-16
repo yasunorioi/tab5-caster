@@ -29,6 +29,10 @@ static const char *TAG = "touch";
 
 #define POLL_MS              100      // 10 Hz — catches taps, cheap (11 B read)
 #define I2C_TIMEOUT_MS       50
+#define TOUCH_DEBOUNCE       3        // consecutive valid polls (~300 ms) = real
+                                      // touch; rejects the ST7123's occasional
+                                      // single-sample phantom (else idle never
+                                      // fires because it keeps resetting the timer)
 
 static i2c_master_dev_handle_t s_dev;
 static volatile int64_t        s_last_us;
@@ -61,10 +65,16 @@ static void poll_task(void *arg)
 {
     (void)arg;
     uint8_t b[READ_LEN];
+    int streak = 0;
     while (1) {
         if (read_block(b) == ESP_OK) {
             if (b[POINT0_OFF] & TOUCH_VALID) {
-                s_last_us = esp_timer_get_time();
+                // Only count sustained contact as activity — a lone valid sample
+                // is a phantom and must not reset the idle timer.
+                if (streak < TOUCH_DEBOUNCE) streak++;
+                if (streak >= TOUCH_DEBOUNCE) s_last_us = esp_timer_get_time();
+            } else {
+                streak = 0;
             }
         }
         vTaskDelay(pdMS_TO_TICKS(POLL_MS));
