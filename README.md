@@ -188,13 +188,24 @@ stray `0xD3` bytes. It's a permanent diagnostic tap — keep it after the caster
   N/E/S/W, a constellation-coloured dot per satellite) and a C/N0 bar strip with
   per-bar PRN labels. Dots/bars are absolute-positioned — a per-tick flex
   relayout of ~30 bars tripped the LVGL task watchdog.
+- **M3-E — status web server. ✅** A **read-only** HTTP server (`web_server.c`,
+  esp_http_server on `:8080`, the port already advertised over `_http._tcp`)
+  serves `GET /api/status` (JSON) and `GET /` (a self-contained dashboard). Both
+  are built from the same live accessors the LVGL panel uses
+  (`wifi_sta_status` / `usb_cdc_source_status` / `upstream_status` /
+  `rtcm_monitor_get` / `caster_source_stats`), so the server holds no state — the
+  page computes RTCM rate from successive polls. De-gated like the panel: it
+  starts on `GOT_IP` alongside the caster and a failure to start never stalls it.
+  No config writes — it cannot touch the caster path. Verified on hardware:
+  `http://rtk.local:8080/` after a turnkey boot.
 
 ## Discovery (mDNS)
 
 `net_mdns.c` advertises the box as **`rtk.local`** with `_ntrip._tcp` (caster) and
-`_http._tcp` (status UI), so a field rover / laptop finds it by name. It becomes
-reachable once the C6 netif is up. Per-unit unique hostnames (`rtk-<serial>`) are
-a product TODO to avoid `.local` collisions on a shared LAN.
+`_http._tcp` (status UI on `:8080`, served by `web_server.c` — see M3-E), so a
+field rover / laptop finds it by name. It becomes reachable once the C6 netif is
+up. Per-unit unique hostnames (`rtk-<serial>`) are a product TODO to avoid
+`.local` collisions on a shared LAN.
 
 ## Build (on a machine with ESP-IDF 5.4+)
 

@@ -19,8 +19,9 @@ idf_component_register(
         "tab5_st7123_init.c"
         "status_screen.c"
         "gnss_view.c"
+        "web_server.c"
     INCLUDE_DIRS "."
     REQUIRES console esp_timer mdns esp_driver_i2c ntripcaster esp_netif esp_event
-             esp_wifi esp_wifi_remote nvs_flash lwip
+             esp_wifi esp_wifi_remote nvs_flash lwip esp_http_server
              esp_lcd esp_lcd_ili9881c esp_driver_ledc esp_lvgl_port esp_mm
 )

@@ -28,12 +28,13 @@
 #include "backlight.h"
 #include "touch.h"
 #include "status_screen.h"
+#include "web_server.h"
 
 static const char *TAG = "tab5-caster";
 
 // Service ports the caster will serve on (once the caster + netif land).
-#define CASTER_PORT  2101   // NTRIP default
-#define ADMIN_PORT   8080   // status / admin web UI
+#define CASTER_PORT  2101          // NTRIP default
+#define ADMIN_PORT   WEB_ADMIN_PORT // status web UI (served by web_server.c)
 
 // Drains the sink and feeds the monitor. Also logs a periodic liveness line so
 // `idf.py monitor` shows activity without needing to type console commands.

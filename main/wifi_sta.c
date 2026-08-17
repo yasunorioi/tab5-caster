@@ -24,6 +24,7 @@
 
 #include "caster.h"
 #include "upstream.h"
+#include "web_server.h"
 
 static const char *TAG = "wifi";
 
@@ -112,6 +113,13 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
             // Start pushing the base RTCM3 to the cloud caster (idles until
             // provisioned via `upstreamset`). Independent of the local caster.
             upstream_start();
+            // Read-only status web UI (http://rtk.local:8080). De-gated: a failed
+            // httpd start is logged, never fatal — the caster must not depend on it.
+            esp_err_t web = web_server_start();
+            if (web != ESP_OK) {
+                ESP_LOGW(TAG, "web_server_start failed (%s) — status UI unavailable",
+                         esp_err_to_name(web));
+            }
         }
     }
 }
