@@ -33,3 +33,8 @@ void wifi_set_creds(const char *ssid, const char *pass);
 
 // Forget stored credentials and reboot (the `wifireset` console command).
 void wifi_forget(void);
+
+// Save / erase creds WITHOUT rebooting — for callers that must send a response
+// first (e.g. the /admin web handler) and trigger the reboot themselves.
+void wifi_save_creds(const char *ssid, const char *pass);
+void wifi_clear_creds(void);

@@ -198,6 +198,18 @@ stray `0xD3` bytes. It's a permanent diagnostic tap — keep it after the caster
   starts on `GOT_IP` alongside the caster and a failure to start never stalls it.
   No config writes — it cannot touch the caster path. Verified on hardware:
   `http://rtk.local:8080/` after a turnkey boot.
+- **M3-F — admin config (writes). ✅** A `/admin` page (and `POST /admin/*` API)
+  to reconfigure the box from a browser: cloud-upstream creds (= `upstreamset`,
+  no reboot), a Mosaic Septentrio-command passthrough (= the `mosaic` console
+  cmd), WiFi creds, and reboot. All writes are guarded by **HTTP Basic auth**
+  whose creds live in NVS (`webadmin` / `webadminreset` console cmds); until a
+  password is set every write returns **503**, so a box on an open field LAN
+  can't be reconfigured out of the box. Endpoints sit under `/admin/` so the
+  browser reuses the cached Basic creds for the page's `fetch()` POSTs; the
+  read-only `GET /` + `/api/status` stay open; passwords are never echoed in any
+  GET. Reboot-bearing writes (WiFi, reboot) send their response first, then
+  `esp_restart()` from a deferred task. Note: web WiFi config only helps while
+  the box is already reachable — first-join provisioning stays console/BLE.
 
 ## Discovery (mDNS)
 

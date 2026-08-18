@@ -64,7 +64,7 @@ void wifi_sta_drop(void)
     esp_wifi_disconnect();   // → WIFI_EVENT_STA_DISCONNECTED → esp_wifi_connect()
 }
 
-void wifi_set_creds(const char *ssid, const char *pass)
+void wifi_save_creds(const char *ssid, const char *pass)
 {
     nvs_handle_t h;
     ESP_ERROR_CHECK(nvs_open(NVS_NS, NVS_READWRITE, &h));
@@ -72,12 +72,10 @@ void wifi_set_creds(const char *ssid, const char *pass)
     ESP_ERROR_CHECK(nvs_set_str(h, "pass", pass ? pass : ""));
     ESP_ERROR_CHECK(nvs_commit(h));
     nvs_close(h);
-    ESP_LOGI(TAG, "saved credentials for SSID '%s' — rebooting to connect", ssid);
-    vTaskDelay(pdMS_TO_TICKS(300));
-    esp_restart();
+    ESP_LOGI(TAG, "saved credentials for SSID '%s'", ssid);
 }
 
-void wifi_forget(void)
+void wifi_clear_creds(void)
 {
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
@@ -85,7 +83,21 @@ void wifi_forget(void)
         nvs_commit(h);
         nvs_close(h);
     }
-    ESP_LOGW(TAG, "credentials erased — rebooting");
+    ESP_LOGW(TAG, "credentials erased");
+}
+
+void wifi_set_creds(const char *ssid, const char *pass)
+{
+    wifi_save_creds(ssid, pass);
+    ESP_LOGI(TAG, "rebooting to connect");
+    vTaskDelay(pdMS_TO_TICKS(300));
+    esp_restart();
+}
+
+void wifi_forget(void)
+{
+    wifi_clear_creds();
+    ESP_LOGW(TAG, "rebooting");
     vTaskDelay(pdMS_TO_TICKS(300));
     esp_restart();
 }

@@ -6,9 +6,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_system.h"
 #include "nvs.h"
 #include "mbedtls/base64.h"
 
@@ -429,6 +432,69 @@ static esp_err_t mosaic_post(httpd_req_t *req)
     return ESP_OK;
 }
 
+// ── deferred reboot ──────────────────────────────────────────────────────────
+// Handlers that reboot (WiFi change, reboot button) must send their HTTP
+// response first, so the actual esp_restart() runs from a short-lived task.
+static void reboot_task(void *arg)
+{
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(800));   // let the response flush + socket close
+    esp_restart();
+}
+
+static void schedule_reboot(void)
+{
+    xTaskCreate(reboot_task, "webreboot", 2048, NULL, 5, NULL);
+}
+
+// ── POST /admin/wifi ─────────────────────────────────────────────────────────
+// Set (or forget) WiFi creds and reboot to apply. NOTE: this only helps while
+// the box is already reachable — it cannot solve first-join provisioning (you
+// need a link to reach this page). Field first-join is still console/BLE.
+static esp_err_t wifi_post(httpd_req_t *req)
+{
+    if (!require_admin(req)) return ESP_OK;
+
+    char body[256];
+    if (recv_body(req, body, sizeof body) < 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad body");
+        return ESP_OK;
+    }
+    httpd_resp_set_type(req, "text/plain");
+
+    char forget[4] = {0};
+    if (form_field(body, "forget", forget, sizeof forget) && strcmp(forget, "1") == 0) {
+        wifi_clear_creds();
+        httpd_resp_sendstr(req, "WiFi creds erased — rebooting");
+        schedule_reboot();
+        return ESP_OK;
+    }
+
+    char ssid[33] = {0}, pass[65] = {0};
+    form_field(body, "ssid", ssid, sizeof ssid);
+    form_field(body, "pass", pass, sizeof pass);
+    if (ssid[0] == '\0') {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "need ssid");
+        return ESP_OK;
+    }
+    wifi_save_creds(ssid, pass);
+    char msg[80];
+    snprintf(msg, sizeof msg, "saved '%s' — rebooting to join", ssid);
+    httpd_resp_sendstr(req, msg);
+    schedule_reboot();
+    return ESP_OK;
+}
+
+// ── POST /admin/reboot ───────────────────────────────────────────────────────
+static esp_err_t reboot_post(httpd_req_t *req)
+{
+    if (!require_admin(req)) return ESP_OK;
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_sendstr(req, "rebooting…");
+    schedule_reboot();
+    return ESP_OK;
+}
+
 // ── GET /admin ───────────────────────────────────────────────────────────────
 // Config page. Loading it triggers the Basic-auth prompt; the browser then
 // reuses the cached creds for the /admin/* POSTs (same path prefix + realm).
@@ -465,6 +531,15 @@ static const char ADMIN_HTML[] =
 "<label>Septentrio command</label><input id=mc placeholder=getRTCMv3Output>"
 "<div class=row><button onclick=sendM()>Send</button></div>"
 "<pre id=mout style=display:none></pre></div>"
+"<div class=card><h2>WiFi</h2>"
+"<label>SSID</label><input id=ws>"
+"<label>password</label><input id=wpw type=password placeholder=\"(unchanged shown blank)\">"
+"<div class=row><button onclick=saveWifi()>Save &amp; reboot</button>"
+"<button class=warn onclick=forgetWifi()>Forget</button></div>"
+"<div class=msg id=wmsg>changing WiFi reboots the box (and drops this page).</div></div>"
+"<div class=card><h2>Device</h2>"
+"<div class=row><button class=warn onclick=reboot()>Reboot</button></div>"
+"<div class=msg id=dmsg></div></div>"
 "</div>"
 "<script>"
 "function post(path,data,el){"
@@ -476,8 +551,15 @@ static const char ADMIN_HTML[] =
 "function forgetUp(){post('/admin/upstream',{forget:'1'}).then(function(r){umsg.textContent=r.t})}"
 "function sendM(){mout.style.display='block';mout.textContent='…';"
 "post('/admin/mosaic',{cmd:mc.value}).then(function(r){mout.textContent=r.t})}"
+"function saveWifi(){var d={ssid:ws.value};if(wpw.value)d.pass=wpw.value;"
+"post('/admin/wifi',d).then(function(r){wmsg.textContent=r.t})}"
+"function forgetWifi(){if(!confirm('Erase WiFi creds and reboot?'))return;"
+"post('/admin/wifi',{forget:'1'}).then(function(r){wmsg.textContent=r.t})}"
+"function reboot(){if(!confirm('Reboot the box?'))return;dmsg.textContent='…';"
+"post('/admin/reboot',{}).then(function(r){dmsg.textContent=r.t}).catch(function(){dmsg.textContent='rebooting…'})}"
 "fetch('/api/status').then(function(r){return r.json()}).then(function(d){"
 "if(d.upstream&&d.upstream.provisioned){uh.value=d.upstream.host||'';up_.value=d.upstream.port||2101;um.value=d.upstream.mount||''}"
+"if(d.wifi){ws.value=d.wifi.ssid||''}"
 "}).catch(function(){});"
 "</script></body></html>";
 
@@ -510,11 +592,15 @@ esp_err_t web_server_start(void)
     const httpd_uri_t admin_uri  = { .uri = "/admin",      .method = HTTP_GET,  .handler = admin_get };
     const httpd_uri_t up_uri     = { .uri = "/admin/upstream", .method = HTTP_POST, .handler = upstream_post };
     const httpd_uri_t mos_uri    = { .uri = "/admin/mosaic",   .method = HTTP_POST, .handler = mosaic_post };
+    const httpd_uri_t wifi_uri   = { .uri = "/admin/wifi",     .method = HTTP_POST, .handler = wifi_post };
+    const httpd_uri_t reboot_uri = { .uri = "/admin/reboot",   .method = HTTP_POST, .handler = reboot_post };
     httpd_register_uri_handler(s_httpd, &status_uri);
     httpd_register_uri_handler(s_httpd, &index_uri);
     httpd_register_uri_handler(s_httpd, &admin_uri);
     httpd_register_uri_handler(s_httpd, &up_uri);
     httpd_register_uri_handler(s_httpd, &mos_uri);
+    httpd_register_uri_handler(s_httpd, &wifi_uri);
+    httpd_register_uri_handler(s_httpd, &reboot_uri);
 
     ESP_LOGI(TAG, "status web UI on :%u  (http://rtk.local:%u/  admin at /admin)",
              WEB_ADMIN_PORT, WEB_ADMIN_PORT);
