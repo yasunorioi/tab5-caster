@@ -29,10 +29,13 @@ static const char *TAG = "touch";
 
 #define POLL_MS              100      // 10 Hz — catches taps, cheap (11 B read)
 #define I2C_TIMEOUT_MS       50
-#define TOUCH_DEBOUNCE       3        // consecutive valid polls (~300 ms) = real
-                                      // touch; rejects the ST7123's occasional
-                                      // single-sample phantom (else idle never
-                                      // fires because it keeps resetting the timer)
+// Phantom rejection without hurting wake latency: count valid samples in a
+// short sliding window rather than requiring N in a row. The ST7123's phantom
+// is a LONE valid sample, so it never reaches 2-in-window; a real tap (even if
+// the controller flickers valid/invalid mid-touch) easily does. Strict
+// consecutive-N was too harsh — quick wake taps didn't register.
+#define TOUCH_WIN            5        // window of polls (~500 ms), <= 8
+#define TOUCH_MIN            2        // >= this many valid in the window = real
 
 static i2c_master_dev_handle_t s_dev;
 static volatile int64_t        s_last_us;
@@ -65,18 +68,16 @@ static void poll_task(void *arg)
 {
     (void)arg;
     uint8_t b[READ_LEN];
-    int streak = 0;
+    uint8_t hist = 0;   // bit i = validity of the poll i cycles ago (bit0 = now)
     while (1) {
-        if (read_block(b) == ESP_OK) {
-            if (b[POINT0_OFF] & TOUCH_VALID) {
-                // Only count sustained contact as activity — a lone valid sample
-                // is a phantom and must not reset the idle timer.
-                if (streak < TOUCH_DEBOUNCE) streak++;
-                if (streak >= TOUCH_DEBOUNCE) s_last_us = esp_timer_get_time();
-            } else {
-                streak = 0;
-            }
-        }
+        int valid = 0;
+        if (read_block(b) == ESP_OK)
+            valid = (b[POINT0_OFF] & TOUCH_VALID) ? 1 : 0;
+        hist = (uint8_t)((hist << 1) | valid);
+        // Real touch only if >= TOUCH_MIN valid in the last TOUCH_WIN polls; a
+        // lone phantom sample can never reach it, so it won't reset the timer.
+        if (__builtin_popcount(hist & ((1u << TOUCH_WIN) - 1)) >= TOUCH_MIN)
+            s_last_us = esp_timer_get_time();
         vTaskDelay(pdMS_TO_TICKS(POLL_MS));
     }
 }
