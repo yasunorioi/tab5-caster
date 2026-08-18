@@ -22,6 +22,6 @@ idf_component_register(
         "web_server.c"
     INCLUDE_DIRS "."
     REQUIRES console esp_timer mdns esp_driver_i2c ntripcaster esp_netif esp_event
-             esp_wifi esp_wifi_remote nvs_flash lwip esp_http_server
+             esp_wifi esp_wifi_remote nvs_flash lwip esp_http_server mbedtls
              esp_lcd esp_lcd_ili9881c esp_driver_ledc esp_lvgl_port esp_mm
 )

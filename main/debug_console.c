@@ -21,6 +21,7 @@
 #include "touch.h"
 #include "nmea_source.h"
 #include "board_power.h"
+#include "web_server.h"
 #include "driver/i2c_master.h"
 
 static const char *TAG = "console";
@@ -369,6 +370,26 @@ static int cmd_upstreamreset(int argc, char **argv)
     return 0;
 }
 
+static int cmd_webadmin(int argc, char **argv)
+{
+    if (argc < 3) {
+        printf("usage: webadmin <user> <pass>\n");
+        printf("  set HTTP Basic-auth creds for the /admin config page + writes\n");
+        return 0;
+    }
+    web_admin_set_creds(argv[1], argv[2]);
+    printf("admin creds saved (user=%s) — /admin writes enabled\n", argv[1]);
+    return 0;
+}
+
+static int cmd_webadminreset(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    web_admin_forget();
+    printf("admin creds erased — /admin writes disabled (503)\n");
+    return 0;
+}
+
 static int cmd_wifidrop(int argc, char **argv)
 {
     (void)argc; (void)argv;
@@ -407,6 +428,8 @@ static void register_cmds(void)
         { .command = "upstreamset", .help = "push base RTCM3 to a cloud caster: upstreamset <host> <port> <mount> <pass>", .hint = "<host> <port> <mount> <pass>", .func = cmd_upstreamset },
         { .command = "upstream", .help = "cloud-upstream link state", .func = cmd_upstream },
         { .command = "upstreamreset", .help = "erase stored upstream creds", .func = cmd_upstreamreset },
+        { .command = "webadmin", .help = "set /admin Basic-auth creds: webadmin <user> <pass>", .hint = "<user> <pass>", .func = cmd_webadmin },
+        { .command = "webadminreset", .help = "erase /admin creds (disables writes)", .func = cmd_webadminreset },
     };
     for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {
         ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));

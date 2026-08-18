@@ -22,3 +22,11 @@
 // (GOT_IP). Returns ESP_OK, or an error if the httpd could not start — the
 // caller logs and presses on (the caster does not depend on this).
 esp_err_t web_server_start(void);
+
+// HTTP Basic-auth credentials guarding the /admin write endpoints, stored in
+// NVS (never hardcoded). Until set, every write returns 503 (writes disabled) —
+// so a box on an open field LAN can't be reconfigured until the operator sets a
+// password. Set/erase via the `webadmin` / `webadminreset` console commands.
+// (The read-only status at GET / and /api/status stays open.)
+void web_admin_set_creds(const char *user, const char *pass);
+void web_admin_forget(void);
