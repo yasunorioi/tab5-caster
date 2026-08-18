@@ -148,10 +148,19 @@ On-device REPL over the console (USB-Serial-JTAG, same USB-C port as
 | `caster` | start the Zig ntripcaster (listener + local source) manually |
 | `csource` | caster's `/MOSAIC` source state (bytes/types via the tee) |
 | `wifiset <ssid> [pass]` / `wifireset` | set / erase WiFi creds in NVS (reboots) |
+| `upstreamset <host> <port> <mount> <pass>` / `upstream` / `upstreamreset` | set / show / erase cloud-upstream creds in NVS |
+| `webadmin <user> <pass>` / `webadminreset` | set / erase the Basic-auth creds for the `/admin` web config (see below) |
 
 The periodic 5s log line folds USB state (`usb[host= attach= open= VID:PID
 stream=…]`) + rx counters into `idf.py monitor`, so the box is diagnosable from
 any capture window without catching one-shot boot events.
+
+**Admin web credentials — there is no default.** The `/admin` config page and
+its `POST /admin/*` writes are gated by HTTP Basic auth, and **every write
+returns `503` until you set a password** with `webadmin <user> <pass>` on the
+console (stored in NVS, never hardcoded — deliberately *not* published here, so a
+flashed box isn't shipped with a known credential). `webadminreset` disables the
+writes again. The read-only status (`GET /` and `/api/status`) needs no auth.
 
 `rtcm_monitor.c` validates **CRC-24Q**, so `valid_frames` means real RTCM3, not
 stray `0xD3` bytes. It's a permanent diagnostic tap — keep it after the caster.
