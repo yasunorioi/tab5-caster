@@ -1,9 +1,12 @@
-// upstream.c — see upstream.h. NTRIP v1 SOURCE client to the cloud caster.
+// upstream.c — see upstream.h. NTRIP source client to the cloud caster.
+// Speaks NTRIP v2 (HTTP POST) by default, with an automatic fallback to the
+// legacy v1 SOURCE line if the caster doesn't answer HTTP.
 
 #include "upstream.h"
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 
 #include "freertos/FreeRTOS.h"
@@ -31,6 +34,10 @@ static SemaphoreHandle_t s_lock;
 static upstream_status_t s_st;   // guarded by s_lock
 static bool s_started;
 static volatile bool s_force_drop;   // set by upstream_drop() to break the stream
+// Try NTRIP v2 (POST) first; latched to false for the session if the caster
+// turns out to speak only v1 (see source_handshake_v2 → HS_NOT_V2). Reset to
+// true whenever creds change, so pointing at a new (v2) caster re-probes.
+static bool s_use_v2 = true;
 
 // ── status helpers ───────────────────────────────────────────────────────────
 static void st_set_msg(const char *msg)
@@ -64,6 +71,7 @@ void upstream_set_creds(const char *host, uint16_t port, const char *mount, cons
     ESP_ERROR_CHECK(nvs_set_str(h, "pass", pass ? pass : ""));
     ESP_ERROR_CHECK(nvs_commit(h));
     nvs_close(h);
+    s_use_v2 = true;   // re-probe v2 against the (possibly new) caster
     ESP_LOGI(TAG, "creds saved: %s:%u /%s — will connect on next cycle",
              host ? host : "", port, skip_slash(mount ? mount : ""));
 }
@@ -148,7 +156,7 @@ static bool send_all(int sock, const uint8_t *p, size_t n)
 }
 
 // NTRIP v1 SOURCE login; returns true if the caster accepted us ("OK"/200).
-static bool source_handshake(int sock, const char *mount, const char *pass)
+static bool source_handshake_v1(int sock, const char *mount, const char *pass)
 {
     char req[256];
     int len = snprintf(req, sizeof(req),
@@ -162,7 +170,7 @@ static bool source_handshake(int sock, const char *mount, const char *pass)
     int r = recv(sock, resp, sizeof(resp) - 1, 0);
     if (r <= 0) { st_set_msg("no handshake response"); return false; }
     resp[r] = '\0';
-    // v1 caster replies "OK\r\n"; v2 would be "HTTP/1.1 200 OK".
+    // v1 caster replies "OK\r\n".
     if (strstr(resp, "OK") != NULL && strstr(resp, "ERROR") == NULL) {
         return true;
     }
@@ -174,6 +182,85 @@ static bool source_handshake(int sock, const char *mount, const char *pass)
     st_set_msg(msg);
     ESP_LOGW(TAG, "SOURCE rejected: %s", resp);
     return false;
+}
+
+// Base64-encode `n` bytes of `in` into NUL-terminated `out`. `out` must hold at
+// least 4*ceil(n/3)+1 bytes. Small self-contained encoder (avoids a mbedtls dep
+// for the one Basic-auth header the v2 handshake needs).
+static void b64_encode(const uint8_t *in, size_t n, char *out)
+{
+    static const char t[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    size_t i, o = 0;
+    for (i = 0; i + 2 < n; i += 3) {
+        uint32_t v = ((uint32_t)in[i] << 16) | ((uint32_t)in[i + 1] << 8) | in[i + 2];
+        out[o++] = t[(v >> 18) & 63];
+        out[o++] = t[(v >> 12) & 63];
+        out[o++] = t[(v >> 6) & 63];
+        out[o++] = t[v & 63];
+    }
+    if (i < n) {                       // 1 or 2 trailing bytes
+        bool two = (i + 1 < n);
+        uint32_t v = (uint32_t)in[i] << 16;
+        if (two) v |= (uint32_t)in[i + 1] << 8;
+        out[o++] = t[(v >> 18) & 63];
+        out[o++] = t[(v >> 12) & 63];
+        out[o++] = two ? t[(v >> 6) & 63] : '=';
+        out[o++] = '=';
+    }
+    out[o] = '\0';
+}
+
+typedef enum { HS_OK, HS_REJECTED, HS_NOT_V2 } hs_result_t;
+
+// NTRIP v2 login: HTTP POST + Ntrip-Version + Basic auth, then the raw RTCM3
+// stream as the request body (our caster frame-syncs on RTCM3, so no chunked
+// transfer-encoding is needed — matches str2str-style pushers). Returns HS_OK if
+// the caster answered "HTTP/1.1 200", HS_REJECTED on an HTTP error (e.g. 401),
+// or HS_NOT_V2 if the reply isn't HTTP at all (caller falls back to v1 SOURCE).
+static hs_result_t source_handshake_v2(int sock, const char *host, uint16_t port,
+                                       const char *mount, const char *pass)
+{
+    // Basic auth: the caster checks only the password (part after the first
+    // colon); the username is ignored, so any non-empty token works.
+    char raw[160];
+    int rn = snprintf(raw, sizeof(raw), "tab5:%s", pass);
+    if (rn <= 0 || (size_t)rn >= sizeof(raw)) { st_set_msg("auth too long"); return HS_REJECTED; }
+    char b64[224];
+    b64_encode((const uint8_t *)raw, (size_t)rn, b64);
+
+    char req[384];
+    int len = snprintf(req, sizeof(req),
+                       "POST /%s HTTP/1.1\r\n"
+                       "Host: %s:%u\r\n"
+                       "Ntrip-Version: Ntrip/2.0\r\n"
+                       "User-Agent: %s\r\n"
+                       "Authorization: Basic %s\r\n"
+                       "Connection: close\r\n"
+                       "\r\n",
+                       mount, host, port, SOURCE_AGENT, b64);
+    if (len <= 0 || (size_t)len >= sizeof(req) ||
+        !send_all(sock, (const uint8_t *)req, (size_t)len)) {
+        st_set_msg("v2 handshake send failed");
+        return HS_REJECTED;
+    }
+    char resp[160] = {0};
+    int r = recv(sock, resp, sizeof(resp) - 1, 0);
+    if (r <= 0) { st_set_msg("no v2 handshake response"); return HS_REJECTED; }
+    resp[r] = '\0';
+    // A v2-capable caster answers "HTTP/1.1 200 OK". A reply that isn't HTTP
+    // means this caster speaks only v1 → tell the caller to fall back.
+    if (strncmp(resp, "HTTP/", 5) != 0) return HS_NOT_V2;
+    const char *sp = strchr(resp, ' ');
+    int code = sp ? atoi(sp + 1) : 0;
+    if (code == 200) return HS_OK;
+    char *nl = strpbrk(resp, "\r\n");
+    if (nl) *nl = '\0';
+    char msg[80];
+    snprintf(msg, sizeof(msg), "v2 rejected: %.60s", resp);
+    st_set_msg(msg);
+    ESP_LOGW(TAG, "v2 POST rejected: %s", resp);
+    return HS_REJECTED;
 }
 
 // ── task ─────────────────────────────────────────────────────────────────────
@@ -227,7 +314,21 @@ static void upstream_task(void *arg)
             continue;
         }
 
-        if (!source_handshake(sock, mount, pass)) {
+        bool accepted;
+        if (s_use_v2) {
+            hs_result_t hr = source_handshake_v2(sock, host, port, mount, pass);
+            if (hr == HS_NOT_V2) {
+                ESP_LOGW(TAG, "caster is not NTRIP v2 — falling back to v1 SOURCE");
+                st_set_msg("caster v1 only — retrying as SOURCE");
+                s_use_v2 = false;   // next cycle uses v1
+                accepted = false;
+            } else {
+                accepted = (hr == HS_OK);
+            }
+        } else {
+            accepted = source_handshake_v1(sock, mount, pass);
+        }
+        if (!accepted) {
             close(sock);
             xSemaphoreTake(s_lock, portMAX_DELAY);
             s_st.connected = false; s_st.reconnects++;   // count rejected retries too
@@ -237,11 +338,12 @@ static void upstream_task(void *arg)
             continue;
         }
 
-        ESP_LOGI(TAG, "connected to %s:%u /%s — streaming base RTCM3", host, port, mount);
+        ESP_LOGI(TAG, "connected to %s:%u /%s (NTRIP %s) — streaming base RTCM3",
+                 host, port, mount, s_use_v2 ? "v2" : "v1");
         xSemaphoreTake(s_lock, portMAX_DELAY);
         s_st.connected = true;
         xSemaphoreGive(s_lock);
-        st_set_msg("streaming");
+        st_set_msg(s_use_v2 ? "streaming (v2)" : "streaming (v1)");
         backoff = 1;                 // reset backoff on a good connection
 
         stream_loop(sock);           // returns on disconnect

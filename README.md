@@ -174,8 +174,11 @@ stray `0xD3` bytes. It's a permanent diagnostic tap — keep it after the caster
   tee; `/MOSAIC` source ingests live RTCM3.
 - **M2.5 — turnkey. ✅** C6 WiFi self-reset on cold boot → STA join → caster
   auto-start → network NTRIP client pulls live RTCM3 end-to-end, no operator input.
-- **M3-A — cloud upstream. ✅** Outbound NTRIP SOURCE push of the base RTCM3 to
-  the cloud caster (`/TAB5`), exp-backoff reconnect; `upstreamset` creds in NVS.
+- **M3-A — cloud upstream. ✅** Outbound NTRIP push of the base RTCM3 to the
+  cloud caster (`/TAB5`), exp-backoff reconnect; `upstreamset` creds in NVS.
+  Speaks **NTRIP v2 (HTTP POST + Basic auth)** by default and auto-falls back to
+  the legacy **v1 SOURCE** line if the caster doesn't answer HTTP (`upstream`
+  shows `streaming (v2)` / `(v1)`).
 - **M3-eph — ephemeris + self-provisioning. ✅** The box configures the Mosaic's
   RTCM3 output itself on boot (MSM7 + 1006/1033/1230 + eph 1019/1020/1042/1044/
   1046), verified from a no-eph receiver back to full eph with no manual setup.
@@ -273,11 +276,17 @@ After either drop — and after any real outage — `stats` must keep advancing
 (the RTCM3 core streams throughout) and a rover must be able to `GET /MOSAIC`
 again (the caster listener survives the reconnect).
 
-**Expect a mount-reclaim delay.** After a reboot or a WiFi drop, the cloud
-caster still holds the previous `/TAB5` SOURCE until it times out, so the box
-sees `SOURCE rejected: ERROR - Mount already in use` and retries with backoff
-for ~30–45 s before it reconnects. This is normal NTRIP v1 behavior, not a
-fault; it self-heals. (A future NTRIP v2 / timestamped mount would shorten it.)
+**Mount reclaim is now immediate (was ~30–45 s).** After a reboot or a WiFi
+drop, the cloud caster still holds the box's previous `/TAB5` connection as a
+half-open zombie. The caster now treats an **authenticated reconnect as a
+takeover**: because a mount is one base by design, a new SOURCE/POST whose
+password checks out evicts the stale connection as soon as it has been idle past
+a short grace (`SOURCE_TAKEOVER_IDLE_MS`, 3 s in
+[ntripcaster](https://github.com/yasunorioi/ntripcaster)) instead of waiting out
+the old 30 s stale timer. Since a reboot/reconnect already exceeds that grace,
+the box reclaims `/TAB5` on its first attempt — no more `Mount already in use`
+backoff. (A *live* source streaming at 1 Hz keeps its idle under the grace, so
+two bases misconfigured onto one mount still can't flap-evict each other.)
 
 For the stressors that only the field exercises, leave the box deployed and
 poll `upstream` / `wifi` / `stats` over hours — a climbing `reconnects` with the

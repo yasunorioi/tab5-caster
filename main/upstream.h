@@ -2,9 +2,11 @@
 //
 // The box is behind Starlink (no reachable inbound), so the cloud FKP engine
 // cannot pull from it. Instead the box opens an OUTBOUND connection to the cloud
-// caster and streams its base RTCM3 as an NTRIP v1 SOURCE. This runs alongside —
-// and independent of — the local caster: the box keeps serving rovers offline,
-// and additionally feeds the cloud for network-RTK/FKP synthesis when online.
+// caster and streams its base RTCM3 up. It speaks NTRIP v2 (HTTP POST) by
+// default and falls back to the legacy v1 SOURCE line if the caster isn't HTTP.
+// This runs alongside — and independent of — the local caster: the box keeps
+// serving rovers offline, and additionally feeds the cloud for network-RTK/FKP
+// synthesis when online.
 //
 // Credentials (host/port/mount/password) live in NVS, set at runtime with the
 // `upstreamset` console command — never hardcoded. The task idles until
